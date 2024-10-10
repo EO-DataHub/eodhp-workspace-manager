@@ -8,112 +8,88 @@ import (
 	"syscall"
 	"time"
 
-	// workspacev1alpha1 "github.com/UKEODHP/workspace-controller/api/v1alpha1"
-
+	"github.com/EO-DataHub/eodhp-workspace-manager/events"
+	"github.com/EO-DataHub/eodhp-workspace-manager/k8s"
 	"github.com/EO-DataHub/eodhp-workspace-manager/manager"
 	"github.com/apache/pulsar-client-go/pulsar"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 )
 
-func listenForMessages(ctx context.Context, consumer pulsar.Consumer) {
-	log.Info().Msg("Message listener started...")
-
-	for {
-		select {
-		case <-ctx.Done():
-			log.Info().Msg("Shutting down message listener...")
-			return
-		default:
-			msg, err := consumer.Receive(ctx)
-			if err != nil {
-				log.Error().Err(err).Msg("Failed to receive message")
-				time.Sleep(1 * time.Second) // Simple backoff in case of failure
-				continue
-			}
-
-			log.Info().Msg("Received message: " + string(msg.Payload()))
-
-			// Pass the message to the manager package for handling
-			err = manager.HandleMessage(msg)
-			if err != nil {
-				log.Printf("Failed to handle message: %v", err)
-				consumer.Nack(msg) // Negative Acknowledge the message
-				continue
-			}
-
-			consumer.Ack(msg) // Acknowledge the message if handled successfully
-		}
-	}
-}
-
 func main() {
 
-	logLevel := flag.String("log-level", "info", "Set the logging level (debug, info, warn, error, fatal, panic)")
+	logLevel := flag.String("log", "info", "Set the logging level (debug, info, warn, error, fatal, panic)")
 
-	// Parse the command-line flags
 	flag.Parse()
 
 	initLogging(*logLevel)
-	initPulsar()
+
+	// Set up the Kubernetes client using controller-runtime client
+	k8sClient, err := k8s.CreateK8sClient()
+	if err != nil {
+		log.Fatal().Err(err).Msg("Failed to create Kubernetes client")
+	}
+
+	// Initialize Pulsar client using the NewPulsarClient function
+	pulsarURL := "pulsar://localhost:6650"
+	pulsarClient, err := events.NewPulsarClient(pulsarURL)
+	if err != nil {
+		log.Fatal().Err(err).Msg("Failed to create Pulsar client")
+	}
+	defer pulsarClient.Close()
+
+	// Initialize the Manager with Kubernetes and Pulsar clients
+	mgr := manager.NewManager(k8sClient, pulsarClient)
+
+	// Start Pulsar listener and pass the Manager to handle messages
+
+	initPulsar(mgr)
 
 	log.Info().Msg("Application started")
 
 }
 
-func initPulsar() {
+func initPulsar(mgr *manager.Manager) {
 	// Get Pulsar connection settings from environment variables
-	pulsarURL := "pulsar://localhost:6650"
+
 	topic := "workspace"
 	subscription := "my-subscription"
+	client := mgr.PulsarClient
 
-	// Initialize Pulsar client
-	client, err := pulsar.NewClient(pulsar.ClientOptions{
-		URL: pulsarURL,
-	})
-	if err != nil {
-		log.Fatal().Err(err).Msg("Could not create Pulsar client")
-	}
-	defer client.Close()
-
-	// Set up a consumer
 	consumer, err := client.Subscribe(pulsar.ConsumerOptions{
 		Topic:            topic,
 		SubscriptionName: subscription,
-		Type:             pulsar.Shared, // Shared subscription model
-		DLQ: &pulsar.DLQPolicy{
-			MaxDeliveries:   3, // Maximum 3 attempts before sending to nacked-messages topic
-			DeadLetterTopic: "persistent://public/default/nacked-messages",
-		},
+		Type:             pulsar.Shared,
 	})
 	if err != nil {
 		log.Fatal().Err(err).Msg("Could not subscribe to topic")
 	}
 	defer consumer.Close()
 
-	// Create a context to manage the lifecycle of the message listener
+	// Create a context for the message listener
 	ctx, cancel := context.WithCancel(context.Background())
 
-	// Start the message listener in a separate goroutine
-	go listenForMessages(ctx, consumer)
+	// Start listening for messages using the manager
+	go events.ListenForMessages(ctx, consumer, mgr)
 
-	// Wait for a signal (e.g., Ctrl+C) to gracefully shut down the application
+	// Wait for termination signal (e.g., Ctrl+C)
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
 	<-stop
 
 	// Trigger graceful shutdown
 	log.Info().Msg("Received shutdown signal, stopping listener...")
-	cancel() // Cancel the context to stop the listener
+	cancel() // Stop the listener
+
 }
+
 func initLogging(logLevel string) {
 	// Set global time field format
 	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
 
-	// Set output to console for human-readable logging
+	// Set output to console
 	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr, TimeFormat: time.RFC3339})
 
-	// Map the log level string to Zerolog log levels
 	switch logLevel {
 	case "debug":
 		zerolog.SetGlobalLevel(zerolog.DebugLevel)
