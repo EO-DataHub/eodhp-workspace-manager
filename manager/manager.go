@@ -29,50 +29,53 @@ func NewManager(k8sClient client.Client, pulsarClient pulsar.Client) *Manager {
 
 // HandleMessage processes an incoming Pulsar message and applies Kubernetes CRUD operations
 func (m *Manager) HandleMessage(msg pulsar.Message) error {
-	var workspaceMsg models.WorkspaceMessage
-	err := json.Unmarshal(msg.Payload(), &workspaceMsg)
+	var WorkspacePayload models.WorkspacePayload
+	err := json.Unmarshal(msg.Payload(), &WorkspacePayload)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to parse message payload")
 		return err
 	}
 
-	switch workspaceMsg.Action {
+	switch WorkspacePayload.Action {
 	case "create":
-		return m.createWorkspace(&workspaceMsg.Spec)
+		return m.createWorkspace(&WorkspacePayload)
 	// case "update":
 	// 	return m.updateWorkspace(&workspaceMsg.Spec)
-	// case "delete":
-	// 	return m.deleteWorkspace(workspaceMsg.Spec.Namespace, workspaceMsg.Spec.Namespace)
+	case "delete":
+		return m.deleteWorkspace(&WorkspacePayload)
 	default:
-		log.Error().Str("action", workspaceMsg.Action).Msg("Unknown action")
+		log.Error().Str("action", WorkspacePayload.Action).Msg("Unknown action")
 		return err
 	}
 }
-func mapEFSAccessPoints(accessPoints []models.AWSEFSAccessPoint) []workspacev1alpha1.EFSAccess {
-	var efsAccessPoints []workspacev1alpha1.EFSAccess
-	for _, ap := range accessPoints {
-		efsAccessPoints = append(efsAccessPoints, workspacev1alpha1.EFSAccess{
-			Name:          ap.Name,
-			FSID:          ap.FSID,
-			RootDirectory: ap.RootDir,
-			User: workspacev1alpha1.User{
-				UID: int64(ap.UID),
-				GID: int64(ap.GID),
-			},
-			Permissions: ap.Permissions,
-		})
-	}
-	return efsAccessPoints
-}
 
-func (m *Manager) createWorkspace(req *models.WorkspaceRequest) error {
+func (m *Manager) createWorkspace(req *models.WorkspacePayload) error {
 
+	// Create a new Workspace object to be created in the cluster
 	workspace := &workspacev1alpha1.Workspace{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      req.Name,
 			Namespace: req.Namespace,
 		},
-		Spec: *models.WorkspaceRequestToSpec(req),
+		Spec: workspacev1alpha1.WorkspaceSpec{
+			Namespace: req.Namespace,
+			AWS: workspacev1alpha1.AWSSpec{
+				RoleName: *req.AWSRoleName, // AWS RoleName, assuming it's not nil
+				EFS: workspacev1alpha1.EFSSpec{
+					AccessPoints: models.MapEFSAccessPoints(req.EFSAccessPoint),
+				},
+				S3: workspacev1alpha1.S3Spec{
+					Buckets: models.MapS3Buckets(req.S3Buckets),
+				},
+			},
+			ServiceAccount: workspacev1alpha1.ServiceAccountSpec{
+				Name: *req.ServiceAccountName, // Service Account, assuming it's not nil
+			},
+			Storage: workspacev1alpha1.StorageSpec{
+				PersistentVolumes:      models.MapPersistentVolumes(req.PersistentVolumes),
+				PersistentVolumeClaims: models.MapPersistentVolumeClaims(req.PersistentVolumeClaims),
+			},
+		},
 	}
 
 	workspaceJSON, err := json.MarshalIndent(workspace, "", "  ")
@@ -94,29 +97,15 @@ func (m *Manager) createWorkspace(req *models.WorkspaceRequest) error {
 		log.Info().Str("name", req.Name).Msg("Workspace already exists")
 		return nil
 	}
-	log.Info().Str("name", req.Name).Msg("Workspace DOES NOT exists")
-	// workspace := &workspacev1alpha1.Workspace{}
-	// err := r.Client.Get(ctx, client.ObjectKey{Name: workspace.Name, Namespace: workspace.Namespace}, existingWorkspace)
-	// if err == nil {
-	// 	log.Info().Str("name", workspace.Name).Msg("Workspace already exists")
-	// 	return nil // Return if workspace exists, no need to create
-	// }
 
-	// workspace := &workspacev1alpha1.Workspace{
-	// 	ObjectMeta: metav1.ObjectMeta{
-	// 		Name:      spec.Namespace,
-	// 		Namespace: spec.Namespace,
-	// 	},
-	// 	Spec: *spec,
-	// }
+	log.Info().Str("name", req.Name).Msg("Workspace does not exists. Creating it now.")
+	err = m.K8sClient.Create(ctx, workspace)
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to create Workspace")
+		return err
+	}
 
-	// _, err := m.K8sClient.Resource(models.WorkspaceGVR).Namespace(spec.Namespace).Create(context.TODO(), workspace, metav1.CreateOptions{})
-	// if err != nil {
-	// 	log.Error().Err(err).Msg("Failed to create Workspace")
-	// 	return err
-	// }
-
-	log.Info().Str("workspace", req.Name).Msg("Successfully created Workspace")
+	log.Info().Str("name", req.Name).Msg("Successfully created Workspace")
 	return nil
 }
 
@@ -139,13 +128,35 @@ func (m *Manager) createWorkspace(req *models.WorkspaceRequest) error {
 // 	return nil
 // }
 
-// func (m *Manager) deleteWorkspace(name, namespace string) error {
-// 	err := m.K8sClient.Resource(models.WorkspaceGVR).Namespace(namespace).Delete(context.TODO(), name, metav1.DeleteOptions{})
-// 	if err != nil {
-// 		log.Error().Err(err).Msg("Failed to delete Workspace")
-// 		return err
-// 	}
+func (m *Manager) deleteWorkspace(req *models.WorkspacePayload) error {
 
-// 	log.Info().Str("workspace", name).Msg("Successfully deleted Workspace")
-// 	return nil
-// }
+	workspace := &workspacev1alpha1.Workspace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      req.Name,
+			Namespace: req.Namespace,
+		},
+	}
+
+	// Set a timeout for the operation
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// Check if the workspace exists
+	existingWorkspace := &workspacev1alpha1.Workspace{}
+	err := m.K8sClient.Get(ctx, client.ObjectKey{Name: req.Name, Namespace: req.Namespace}, existingWorkspace)
+	if err != nil {
+		// If the workspace does not exist, log it and return
+		log.Info().Str("name", req.Name).Str("namespace", req.Namespace).Msg("Workspace does not exist. Nothing to delete.")
+		return nil
+	}
+	log.Info().Str("name", req.Name).Str("namespace", req.Namespace).Msg("Deleting workspace.")
+
+	err = m.K8sClient.Delete(ctx, workspace)
+	if err != nil {
+		log.Error().Err(err).Str("name", req.Name).Str("namespace", req.Namespace).Msg("Failed to delete Workspace")
+		return err
+	}
+
+	log.Info().Str("workspace", req.Name).Msg("Successfully deleted Workspace")
+	return nil
+}

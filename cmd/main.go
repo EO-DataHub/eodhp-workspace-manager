@@ -60,6 +60,10 @@ func initPulsar(mgr *manager.Manager) {
 		Topic:            topic,
 		SubscriptionName: subscription,
 		Type:             pulsar.Shared,
+		DLQ: &pulsar.DLQPolicy{
+			MaxDeliveries:   1, // Maximum 1 attempts before sending to nacked topic
+			DeadLetterTopic: "persistent://public/default/nacked",
+		},
 	})
 	if err != nil {
 		log.Fatal().Err(err).Msg("Could not subscribe to topic")

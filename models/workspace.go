@@ -21,43 +21,25 @@ type WorkspaceMessage struct {
 	Spec   WorkspaceRequest `json:"spec"` // Using models from workspace-manager
 }
 
-func WorkspaceRequestToSpec(req *WorkspaceRequest) *workspacev1alpha1.WorkspaceSpec {
-	return &workspacev1alpha1.WorkspaceSpec{
-		Namespace: req.Namespace, // Map Namespace directly
-		AWS: workspacev1alpha1.AWSSpec{
-			RoleName: req.AWSRoleName,                        // Map Role Name
-			EFS:      mapEFSAccessPoints(req.EFSAccessPoint), // Map EFS Access Points
-			S3:       mapS3Buckets(req.S3Buckets),            // Map S3 Buckets
-		},
-		ServiceAccount: workspacev1alpha1.ServiceAccountSpec{
-			Name: req.ServiceAccountName, // Map Service Account Name
-		},
-		Storage: workspacev1alpha1.StorageSpec{
-			PersistentVolumes:      mapPersistentVolumes(req.PersistentVolumes),           // Map Persistent Volumes
-			PersistentVolumeClaims: mapPersistentVolumeClaims(req.PersistentVolumeClaims), // Map Persistent Volume Claims
-		},
-	}
-}
+// func WorkspaceRequestToSpec(req *WorkspaceRequest) *workspacev1alpha1.WorkspaceSpec {
+// 	return &workspacev1alpha1.WorkspaceSpec{
+// 		Namespace: req.Namespace, // Map Namespace directly
+// 		AWS: workspacev1alpha1.AWSSpec{
+// 			RoleName: req.AWSRoleName,                        // Map Role Name
+// 			EFS:      mapEFSAccessPoints(req.EFSAccessPoint), // Map EFS Access Points
+// 			S3:       mapS3Buckets(req.S3Buckets),            // Map S3 Buckets
+// 		},
+// 		ServiceAccount: workspacev1alpha1.ServiceAccountSpec{
+// 			Name: req.ServiceAccountName, // Map Service Account Name
+// 		},
+// 		Storage: workspacev1alpha1.StorageSpec{
+// 			PersistentVolumes:      mapPersistentVolumes(req.PersistentVolumes),           // Map Persistent Volumes
+// 			PersistentVolumeClaims: mapPersistentVolumeClaims(req.PersistentVolumeClaims), // Map Persistent Volume Claims
+// 		},
+// 	}
+// }
 
-// Helper functions to map EFS, S3, PersistentVolumes, etc.
-func mapEFSAccessPoints(efsAccessPoints []AWSEFSAccessPoint) workspacev1alpha1.EFSSpec {
-	mappedEFS := workspacev1alpha1.EFSSpec{
-		AccessPoints: []workspacev1alpha1.EFSAccess{}, // Initialize an empty slice of EFSAccess
-	}
-	for _, efs := range efsAccessPoints {
-		mappedEFS.AccessPoints = append(mappedEFS.AccessPoints, workspacev1alpha1.EFSAccess{
-			Name:          efs.Name,
-			FSID:          efs.FSID,
-			RootDirectory: efs.RootDir,
-			User: workspacev1alpha1.User{
-				UID: int64(efs.UID),
-				GID: int64(efs.GID),
-			},
-			Permissions: efs.Permissions,
-		})
-	}
-	return mappedEFS
-}
+
 
 func mapS3Buckets(s3Buckets []AWSS3Bucket) workspacev1alpha1.S3Spec {
 	mappedS3 := workspacev1alpha1.S3Spec{
@@ -103,4 +85,24 @@ func mapPersistentVolumeClaims(pvcs []PersistentVolumeClaim) []workspacev1alpha1
 		})
 	}
 	return mappedPVCs
+}
+
+
+type WorkspacePayload struct {
+	Action string `json:"action"` // Defines the action (create, update, patch, delete)
+
+	// Common fields for all actions
+	Name      string `json:"name"`
+	Namespace string `json:"namespace"`
+
+	// Fields required for "create" and "update"
+	ServiceAccountName     *string                  `json:"serviceAccountName,omitempty"`
+	AWSRoleName            *string                  `json:"awsRoleName,omitempty"`
+	EFSAccessPoint         *[]AWSEFSAccessPoint     `json:"efsAccessPoint,omitempty"`
+	S3Buckets              *[]AWSS3Bucket           `json:"s3Buckets,omitempty"`
+	PersistentVolumes      *[]PersistentVolume      `json:"persistentVolume,omitempty"`
+	PersistentVolumeClaims *[]PersistentVolumeClaim `json:"persistentVolumeClaim,omitempty"`
+
+	// Specific fields for patch operations (e.g., partial updates)
+	PatchFields map[string]interface{} `json:"patchFields,omitempty"` // For patch requests, dynamic fields
 }
