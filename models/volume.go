@@ -4,7 +4,7 @@ import (
 	workspacev1alpha1 "github.com/UKEODHP/workspace-controller/api/v1alpha1"
 )
 
-// PersistentVolume represents a Kubernetes Persistent Volume.
+// Represents a Kubernetes Persistent Volume.
 type PersistentVolume struct {
 	PVName          string `json:"pvName"`
 	StorageClass    string `json:"storageClass"`
@@ -13,7 +13,7 @@ type PersistentVolume struct {
 	AccessPointName string `json:"accessPointName"`
 }
 
-// PersistentVolumeClaim represents a Kubernetes Persistent Volume Claim.
+// Represents a Kubernetes Persistent Volume Claim.
 type PersistentVolumeClaim struct {
 	PVCName      string `json:"pvcName"`
 	StorageClass string `json:"storageClass"`
@@ -21,33 +21,35 @@ type PersistentVolumeClaim struct {
 	PVName       string `json:"pvName"`
 }
 
+// Mapping function to convert request PersistentVolumes to Workspace PVSpec format
 func MapPersistentVolumes(pvs *[]PersistentVolume) []workspacev1alpha1.PVSpec {
-    if pvs == nil {
-        return nil
-    }
+	if pvs == nil {
+		return nil
+	}
 
-    var result []workspacev1alpha1.PVSpec
-    for _, pv := range *pvs {
-        result = append(result, workspacev1alpha1.PVSpec{
-            Name:         pv.PVName,
-            StorageClass: pv.StorageClass,
-            Size:         pv.Size,
-            VolumeSource: &workspacev1alpha1.VolumeSource{
-                Driver:          pv.Driver,
-                AccessPointName: pv.AccessPointName,
-            },
-        })
-    }
-    return result
+	var result []workspacev1alpha1.PVSpec
+	for _, pv := range *pvs {
+		result = append(result, workspacev1alpha1.PVSpec{
+			Name:         pv.PVName,
+			StorageClass: pv.StorageClass,
+			Size:         pv.Size,
+			VolumeSource: &workspacev1alpha1.VolumeSource{
+				Driver:          pv.Driver,
+				AccessPointName: pv.AccessPointName,
+			},
+		})
+	}
+	return result
 }
 
+// Mapping function to convert request PersistentVolumeClaims to Workspace PVCSpec format
 func MapPersistentVolumeClaims(pvcs *[]PersistentVolumeClaim) []workspacev1alpha1.PVCSpec {
-    if pvcs == nil {
-        return nil
-    }
+	if pvcs == nil {
+		return nil
+	}
 
-    var result []workspacev1alpha1.PVCSpec
-    for _, pvc := range *pvcs {
+	var result []workspacev1alpha1.PVCSpec
+	for _, pvc := range *pvcs {
 		result = append(result, workspacev1alpha1.PVCSpec{
 			PVSpec: workspacev1alpha1.PVSpec{
 				Name:         pvc.PVCName,
@@ -56,6 +58,6 @@ func MapPersistentVolumeClaims(pvcs *[]PersistentVolumeClaim) []workspacev1alpha
 			},
 			PVName: pvc.PVName,
 		})
-    }
-    return result
+	}
+	return result
 }

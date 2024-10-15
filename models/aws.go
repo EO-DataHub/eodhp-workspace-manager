@@ -4,7 +4,7 @@ import (
 	workspacev1alpha1 "github.com/UKEODHP/workspace-controller/api/v1alpha1"
 )
 
-// AWSEFSAccessPoint represents an AWS Elastic File System (EFS) access point.
+// Represents an AWS Elastic File System (EFS) access point.
 type AWSEFSAccessPoint struct {
 	Name        string `json:"name"`
 	FSID        string `json:"fsid"`
@@ -14,7 +14,7 @@ type AWSEFSAccessPoint struct {
 	Permissions string `json:"permissions"`
 }
 
-// AWSS3Bucket represents an S3 bucket configuration.
+// Represents an S3 bucket configuration.
 type AWSS3Bucket struct {
 	BucketName      string `json:"bucketName"`
 	BucketPath      string `json:"bucketPath"`
@@ -22,6 +22,7 @@ type AWSS3Bucket struct {
 	EnvVar          string `json:"envVar"`
 }
 
+// Mapping function to convert request AWSEFSAccessPoints to Workspace CRD format
 func MapEFSAccessPoints(accessPoints *[]AWSEFSAccessPoint) []workspacev1alpha1.EFSAccess {
 	if accessPoints == nil {
 		return nil
@@ -43,6 +44,7 @@ func MapEFSAccessPoints(accessPoints *[]AWSEFSAccessPoint) []workspacev1alpha1.E
 	return result
 }
 
+// Mapping function to convert request AWSS3Buckets to Workspace CRD format
 func MapS3Buckets(buckets *[]AWSS3Bucket) []workspacev1alpha1.S3Bucket {
     if buckets == nil {
         return nil

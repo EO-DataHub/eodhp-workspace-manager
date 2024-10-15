@@ -22,15 +22,16 @@ func main() {
 
 	flag.Parse()
 
+	// Setup logging
 	initLogging(*logLevel)
 
-	// Set up the Kubernetes client using controller-runtime client
+	// Set up the Kubernetes client
 	k8sClient, err := k8s.CreateK8sClient()
 	if err != nil {
 		log.Fatal().Err(err).Msg("Failed to create Kubernetes client")
 	}
 
-	// Initialize Pulsar client using the NewPulsarClient function
+	// Setup the Pulsar client
 	pulsarURL := "pulsar://localhost:6650"
 	pulsarClient, err := events.NewPulsarClient(pulsarURL)
 	if err != nil {
@@ -38,22 +39,21 @@ func main() {
 	}
 	defer pulsarClient.Close()
 
-	// Initialize the Manager with Kubernetes and Pulsar clients
+	// Initialize the Manager with our clients
 	mgr := manager.NewManager(k8sClient, pulsarClient)
 
 	// Start Pulsar listener and pass the Manager to handle messages
-
 	initPulsar(mgr)
 
-	log.Info().Msg("Application started")
+	log.Info().Msg("Workspace Manager started")
 
 }
 
 func initPulsar(mgr *manager.Manager) {
-	// Get Pulsar connection settings from environment variables
 
-	topic := "workspace"
-	subscription := "my-subscription"
+	// TODO: Get Pulsar connection settings from environment variables in our ArgoCD deployment
+	topic := "workspace"                 // Think of better name?
+	subscription := "workspace-listener" // Think of better name?
 	client := mgr.PulsarClient
 
 	consumer, err := client.Subscribe(pulsar.ConsumerOptions{
@@ -61,8 +61,8 @@ func initPulsar(mgr *manager.Manager) {
 		SubscriptionName: subscription,
 		Type:             pulsar.Shared,
 		DLQ: &pulsar.DLQPolicy{
-			MaxDeliveries:   1, // Maximum 1 attempts before sending to nacked topic
-			DeadLetterTopic: "persistent://public/default/nacked",
+			MaxDeliveries:   1,                                 // TODO: optimize this in the next few sprints
+			DeadLetterTopic: "persistent://public/default/dlq", // Dead letter topic - if message fails after MaxDeliveries attempts
 		},
 	})
 	if err != nil {
@@ -83,12 +83,12 @@ func initPulsar(mgr *manager.Manager) {
 
 	// Trigger graceful shutdown
 	log.Info().Msg("Received shutdown signal, stopping listener...")
-	cancel() // Stop the listener
+	cancel()
 
 }
 
 func initLogging(logLevel string) {
-	// Set global time field format
+
 	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
 
 	// Set output to console
