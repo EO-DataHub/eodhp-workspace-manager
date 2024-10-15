@@ -19,7 +19,7 @@ func NewPulsarClient(pulsarURL string) (pulsar.Client, error) {
 	return client, nil
 }
 
-// ListenForMessages listens for messages from the Pulsar consumer and passes them to the Manager
+// Listens for messages from the Pulsar consumer and passes them to the Manager
 func ListenForMessages(ctx context.Context, consumer pulsar.Consumer, mgr *manager.Manager) {
 	log.Info().Msg("Listening for messages...")
 
@@ -37,9 +37,9 @@ func ListenForMessages(ctx context.Context, consumer pulsar.Consumer, mgr *manag
 			}
 			err = mgr.HandleMessage(msg)
 			if err != nil {
-				consumer.Nack(msg) // Negative acknowledge
+				consumer.Nack(msg) 
 			} else {
-				consumer.Ack(msg) // Acknowledge the message
+				consumer.Ack(msg)
 			}
 		}
 	}

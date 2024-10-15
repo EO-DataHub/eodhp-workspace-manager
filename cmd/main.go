@@ -52,8 +52,8 @@ func main() {
 func initPulsar(mgr *manager.Manager) {
 
 	// TODO: Get Pulsar connection settings from environment variables in our ArgoCD deployment
-	topic := "workspace"                 // Think of better name?
-	subscription := "workspace-listener" // Think of better name?
+	topic := "workspace"                 // TODO: Verify name
+	subscription := "workspace-listener" // TODO: Verify name
 	client := mgr.PulsarClient
 
 	consumer, err := client.Subscribe(pulsar.ConsumerOptions{
