@@ -2,115 +2,65 @@ package main
 
 import (
 	"context"
-	"flag"
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
-	"github.com/EO-DataHub/eodhp-workspace-manager/events"
-	"github.com/EO-DataHub/eodhp-workspace-manager/k8s"
-	"github.com/EO-DataHub/eodhp-workspace-manager/manager"
-	"github.com/apache/pulsar-client-go/pulsar"
-	"github.com/rs/zerolog"
+	"github.com/EO-DataHub/eodhp-workspace-manager/internal/events"
+	"github.com/EO-DataHub/eodhp-workspace-manager/internal/k8s"
+	"github.com/EO-DataHub/eodhp-workspace-manager/internal/manager"
+	"github.com/EO-DataHub/eodhp-workspace-manager/internal/utils"
 	"github.com/rs/zerolog/log"
+	ctrl "sigs.k8s.io/controller-runtime"
 )
 
 func main() {
 
-	logLevel := flag.String("log", "info", "Set the logging level (debug, info, warn, error, fatal, panic)")
+	// Initialize configuration and logging
+	config := utils.LoadConfig()
+	utils.InitLogger(config.LogLevel)
+	log.Info().Msg("Workspace Manager starting...")
 
-	flag.Parse()
+	// Initialize Pulsar client
+	pulsarClient := events.NewPulsarClient(config.Pulsar.URL)
 
-	// Setup logging
-	initLogging(*logLevel)
-
-	// Set up the Kubernetes client
-	k8sClient, err := k8s.CreateK8sClient()
+	// Start Kubernetes manager to watch for changes to Workspace resources
+	k8sMgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{})
 	if err != nil {
-		log.Fatal().Err(err).Msg("Failed to create Kubernetes client")
+		log.Fatal().Err(err).Msg("Failed to create Kubernetes manager")
 	}
 
-	// Setup the Pulsar client
-	pulsarURL := "pulsar://localhost:6650"
-	pulsarClient, err := events.NewPulsarClient(pulsarURL)
-	if err != nil {
-		log.Fatal().Err(err).Msg("Failed to create Pulsar client")
-	}
-	defer pulsarClient.Close()
+	log.Info().Msg(k8sMgr.GetConfig().APIPath)
 
-	// Initialize the Manager with our clients
-	mgr := manager.NewManager(k8sClient, pulsarClient)
+	// Initialize ResourceOperator to allow making changes to Workspace Resources
+	k8sClient := k8s.NewClient()
+	resourceOperator := manager.NewResourceOperator(k8sClient, pulsarClient)
 
-	// Start Pulsar listener and pass the Manager to handle messages
-	initPulsar(mgr)
+	// Start Pulsar listener to listen for messages in workspace-settings topic
+	listener := events.NewListener(pulsarClient, config.Pulsar.TopicProducer, config.Pulsar.Subscription, resourceOperator)
+	go listener.Start()
 
-	log.Info().Msg("Workspace Manager started")
+	// Start StatusWatcher
+	statusWatcher := k8s.NewWorkspaceWatcher(k8sMgr.GetClient(), pulsarClient, config.Pulsar.TopicConsumer)
+	go func() {
+		if err := statusWatcher.Start(context.Background(), k8sMgr); err != nil {
+			log.Fatal().Err(err).Msg("Failed to start StatusWatcher")
+		}
+	}()
 
-}
+	// Start the Kubernetes manager
+	go func() {
+		if err := k8sMgr.Start(ctrl.SetupSignalHandler()); err != nil {
+			log.Fatal().Err(err).Msg("Failed to start Kubernetes manager")
+		}
+	}()
 
-func initPulsar(mgr *manager.Manager) {
-
-	// TODO: Get Pulsar connection settings from environment variables in our ArgoCD deployment
-	topic := "workspace"                 // TODO: Verify name
-	subscription := "workspace-listener" // TODO: Verify name
-	client := mgr.PulsarClient
-
-	consumer, err := client.Subscribe(pulsar.ConsumerOptions{
-		Topic:            topic,
-		SubscriptionName: subscription,
-		Type:             pulsar.Shared,
-		DLQ: &pulsar.DLQPolicy{
-			MaxDeliveries:   1,                                 // TODO: optimize this in the next few sprints
-			DeadLetterTopic: "persistent://public/default/dlq", // Dead letter topic - if message fails after MaxDeliveries attempts
-		},
-	})
-	if err != nil {
-		log.Fatal().Err(err).Msg("Could not subscribe to topic")
-	}
-	defer consumer.Close()
-
-	// Create a context for the message listener
-	ctx, cancel := context.WithCancel(context.Background())
-
-	// Start listening for messages using the manager
-	go events.ListenForMessages(ctx, consumer, mgr)
-
-	// Wait for termination signal (e.g., Ctrl+C)
+	// Handle graceful shutdown
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
 	<-stop
 
-	// Trigger graceful shutdown
-	log.Info().Msg("Received shutdown signal, stopping listener...")
-	cancel()
+	log.Info().Msg("Shutting down Workspace Manager...")
+	listener.Stop()
 
-}
-
-func initLogging(logLevel string) {
-
-	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
-
-	// Set output to console
-	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr, TimeFormat: time.RFC3339})
-
-	switch logLevel {
-	case "debug":
-		zerolog.SetGlobalLevel(zerolog.DebugLevel)
-	case "info":
-		zerolog.SetGlobalLevel(zerolog.InfoLevel)
-	case "warn":
-		zerolog.SetGlobalLevel(zerolog.WarnLevel)
-	case "error":
-		zerolog.SetGlobalLevel(zerolog.ErrorLevel)
-	case "fatal":
-		zerolog.SetGlobalLevel(zerolog.FatalLevel)
-	case "panic":
-		zerolog.SetGlobalLevel(zerolog.PanicLevel)
-	default:
-		log.Warn().Str("level", logLevel).Msg("Invalid log level, defaulting to info")
-		zerolog.SetGlobalLevel(zerolog.InfoLevel)
-	}
-
-	log.Info().Str("log_level", logLevel).Msg("Log level set")
 }
