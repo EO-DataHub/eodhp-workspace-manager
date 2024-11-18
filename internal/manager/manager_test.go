@@ -15,7 +15,7 @@ package manager
 // )
 
 // func stringPointer(s string) *string {
-// 	return &s
+// 	return &s 
 // }
 
 // // Runs setup code once for all tests

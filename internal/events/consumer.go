@@ -5,40 +5,45 @@ import (
 	"encoding/json"
 
 	"github.com/EO-DataHub/eodhp-workspace-manager/internal/manager"
+	"github.com/EO-DataHub/eodhp-workspace-manager/internal/utils"
 	"github.com/EO-DataHub/eodhp-workspace-manager/models"
 	"github.com/apache/pulsar-client-go/pulsar"
 	"github.com/rs/zerolog/log"
 )
 
-type Listener struct {
+// ConfigurationConsumer listens for messages on a Pulsar topic
+type ConfigurationConsumer struct {
 	Consumer pulsar.Consumer
-	Operator *manager.ResourceOperator
+	Operator *manager.WorkspaceOperator
+	Config   *utils.Config
 	ctx      context.Context
 	cancel   context.CancelFunc
 }
 
-// NewListener creates a new Pulsar listener
-func NewListener(client pulsar.Client, topic, subscription string, operator *manager.ResourceOperator) *Listener {
+// NewConfigurationConsumer creates a new Pulsar ConfigurationConsumer
+func NewConfigurationConsumer(client pulsar.Client, operator *manager.WorkspaceOperator, config *utils.Config) *ConfigurationConsumer {
 	consumer, err := client.Subscribe(pulsar.ConsumerOptions{
-		Topic:            topic,
-		SubscriptionName: subscription,
+		Topic:            config.Pulsar.TopicConsumer,
+		SubscriptionName: config.Pulsar.Subscription,
 		Type:             pulsar.Shared,
 	})
 	if err != nil {
 		log.Fatal().Err(err).Msg("Failed to create Pulsar consumer")
 	}
 
+	// Create a new context for the consumer
 	ctx, cancel := context.WithCancel(context.Background())
-	return &Listener{
+	return &ConfigurationConsumer{
 		Consumer: consumer,
 		Operator: operator,
+		Config:   config,
 		ctx:      ctx,
 		cancel:   cancel,
 	}
 }
 
 // Start begins listening for messages
-func (l *Listener) Start() {
+func (l *ConfigurationConsumer) Start() {
 	log.Info().Msg("Starting Pulsar listener...")
 	go func() {
 		for {
@@ -60,14 +65,17 @@ func (l *Listener) Start() {
 	}()
 }
 
-// Stop gracefully shuts down the listener
-func (l *Listener) Stop() {
+// Stop gracefully shuts down the ConfigurationConsumer
+func (l *ConfigurationConsumer) Stop() {
 	l.cancel()
 	l.Consumer.Close()
 }
 
-func (l *Listener) handleMessage(msg pulsar.Message) {
-	var payload models.WorkspacePayload
+// handleMessage processes a Pulsar message
+func (l *ConfigurationConsumer) handleMessage(msg pulsar.Message) {
+
+	// Unmarshal the message
+	var payload models.WorkspaceSettings
 	err := json.Unmarshal(msg.Payload(), &payload)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to unmarshal Pulsar message payload")

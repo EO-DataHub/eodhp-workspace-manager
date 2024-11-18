@@ -11,12 +11,12 @@ github.com/Azure/go-ansiterm v0.0.0-20210617225240-d185dfc1b5a1/go.mod h1:xomTg6
 github.com/BurntSushi/toml v0.3.1/go.mod h1:xHWCNGjB5oqiDr8zfno3MHue2Ht5sIBksp03qcyfWMU=
 github.com/DataDog/zstd v1.5.0 h1:+K/VEwIAaPcHiMtQvpLD4lqW7f0Gk3xdYZmI1hD+CXo=
 github.com/DataDog/zstd v1.5.0/go.mod h1:g4AWEaM3yOg3HYfnJ3YIawPnVdXJh9QME85blwSAmyw=
+github.com/EO-DataHub/eodhp-workspace-controller v0.0.0-20241030113520-dc34582b6de4 h1:So2sxRVRW4oHBjcJCRTq22dRFljyiCshldKKGSuKBBk=
+github.com/EO-DataHub/eodhp-workspace-controller v0.0.0-20241030113520-dc34582b6de4/go.mod h1:Z5ALaVLcma/tuYsjE9mTiIyng56CJCyz4ajvovTU/dk=
 github.com/Microsoft/go-winio v0.6.2 h1:F2VQgta7ecxGYO8k3ZZz3RS8fVIXVxONVUPlNERoyfY=
 github.com/Microsoft/go-winio v0.6.2/go.mod h1:yd8OoFMLzJbo9gZq8j5qaps8bJ9aShtEA8Ipt1oGCvU=
 github.com/Microsoft/hcsshim v0.11.5 h1:haEcLNpj9Ka1gd3B3tAEs9CpE0c+1IhoL59w/exYU38=
 github.com/Microsoft/hcsshim v0.11.5/go.mod h1:MV8xMfmECjl5HdO7U/3/hFVnkmSBjAjmA09d4bExKcU=
-github.com/UKEODHP/workspace-controller v0.0.0-20241002145836-988a443b037d h1:yMOpeuVchjF3pVGpnapRLVb7emDpNDRkpJ5RtL2MyZc=
-github.com/UKEODHP/workspace-controller v0.0.0-20241002145836-988a443b037d/go.mod h1:AZ1waNXPsm3pOWVbCLS064rN2aeP1VAVxW/3gf364gs=
 github.com/apache/pulsar-client-go v0.14.0 h1:P7yfAQhQ52OCAu8yVmtdbNQ81vV8bF54S2MLmCPJC9w=
 github.com/apache/pulsar-client-go v0.14.0/go.mod h1:PNUE29x9G1EHMvm41Bs2vcqwgv7N8AEjeej+nEVYbX8=
 github.com/ardielle/ardielle-go v1.5.2 h1:TilHTpHIQJ27R1Tl/iITBzMwiUGSlVfiVhwDNGM3Zj4=

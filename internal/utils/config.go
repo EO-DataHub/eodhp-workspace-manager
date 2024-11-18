@@ -17,13 +17,27 @@ type PulsarConfig struct {
 	Subscription  string `yaml:"subscription"`
 }
 
-// Config holds the application's configuration
-type Config struct {
-	LogLevel string       `yaml:"logLevel"`
-	Pulsar   PulsarConfig `yaml:"pulsar"`
+type AWSConfig struct {
+	Cluster string `yaml:"cluster"`
+	FSID    string `yaml:"fsId"`
 }
 
-// LoadConfig reads the configuration file, processes it as a template, and unmarshals it into a Config struct
+type StorageConfig struct {
+	Size         string `yaml:"size"`
+	StorageClass string `yaml:"storageClass"`
+	PVCName      string `yaml:"pvcName"`
+	Driver       string `yaml:"efs.csi.aws.com"`
+}
+
+// Config holds the application's configuration
+type Config struct {
+	LogLevel string        `yaml:"logLevel"`
+	Pulsar   PulsarConfig  `yaml:"pulsar"`
+	AWS      AWSConfig     `yaml:"aws"`
+	Storage  StorageConfig `yaml:"storage"`
+}
+
+// LoadConfig loads the application configuration from a file
 func LoadConfig() *Config {
 	// Get the config file path from the environment variable
 	configPath := "/home/jlangstone/Work/UKEODHP/eodhp-workspace-manager/tmp/config.yaml"

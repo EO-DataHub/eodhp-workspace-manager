@@ -1,4 +1,4 @@
-package k8s
+package events
 
 import (
 	"context"
@@ -6,7 +6,7 @@ import (
 	"reflect"
 	"time"
 
-	workspacev1alpha1 "github.com/UKEODHP/workspace-controller/api/v1alpha1"
+	workspacev1alpha1 "github.com/EO-DataHub/eodhp-workspace-controller/api/v1alpha1"
 	"github.com/apache/pulsar-client-go/pulsar"
 	"github.com/rs/zerolog/log"
 	"k8s.io/client-go/tools/cache"
@@ -14,42 +14,48 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
 
-type WorkspaceWatcher struct {
+// StatusPublisher publishes Workspace status updates to a Pulsar topic
+type StatusPublisher struct {
 	k8sClient    client.Client
 	pulsarClient pulsar.Client
 	topic        string
 }
 
-func NewWorkspaceWatcher(k8sClient client.Client, pulsarClient pulsar.Client, topic string) *WorkspaceWatcher {
-	return &WorkspaceWatcher{
+// NewStatusPublisher initializes a new StatusPublisher
+func NewStatusPublisher(k8sClient client.Client, pulsarClient pulsar.Client, topic string) *StatusPublisher {
+	return &StatusPublisher{
 		k8sClient:    k8sClient,
 		pulsarClient: pulsarClient,
 		topic:        topic,
 	}
 }
 
-func (w *WorkspaceWatcher) Start(ctx context.Context, mgr manager.Manager) error {
+// Start starts the StatusPublisher
+func (w *StatusPublisher) Start(ctx context.Context, mgr manager.Manager) error {
 	informer, err := mgr.GetCache().GetInformer(ctx, &workspacev1alpha1.Workspace{})
 	if err != nil {
 		log.Fatal().Err(err).Msg("Failed to create informer for Workspace CR")
 		return err
 	}
 
+	// Add event handler to informer
 	informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		UpdateFunc: w.handleUpdate,
 	})
 
-	log.Info().Msg("Started WorkspaceWatcher")
+	log.Info().Msg("Listening for Workspace Status Updates...")
 	return nil
 }
 
-func (w *WorkspaceWatcher) handleUpdate(oldObj, newObj interface{}) {
+// handleUpdate is called when a Workspace CR status is updated
+func (w *StatusPublisher) handleUpdate(oldObj, newObj interface{}) {
 	oldWorkspace, ok := oldObj.(*workspacev1alpha1.Workspace)
 	if !ok {
 		log.Error().Msg("Failed to cast old object to Workspace")
 		return
 	}
 
+	// Cast new object to Workspace
 	newWorkspace, ok := newObj.(*workspacev1alpha1.Workspace)
 	if !ok {
 		log.Error().Msg("Failed to cast new object to Workspace")
@@ -62,9 +68,6 @@ func (w *WorkspaceWatcher) handleUpdate(oldObj, newObj interface{}) {
 		log.Debug().Msg("No changes in Workspace status; skipping")
 		return
 	}
-
-	// Log status change detection
-	log.Info().Msg("STATUS HAS CHANGED!")
 
 	// Prepare the status update message
 	statusUpdate := map[string]interface{}{
@@ -84,7 +87,8 @@ func (w *WorkspaceWatcher) handleUpdate(oldObj, newObj interface{}) {
 	}
 }
 
-func (w *WorkspaceWatcher) sendStatusUpdate(statusBytes []byte) error {
+// sendStatusUpdate sends a status update to a Pulsar topic
+func (w *StatusPublisher) sendStatusUpdate(statusBytes []byte) error {
 	producer, err := w.pulsarClient.CreateProducer(pulsar.ProducerOptions{
 		Topic: w.topic,
 	})
@@ -94,6 +98,7 @@ func (w *WorkspaceWatcher) sendStatusUpdate(statusBytes []byte) error {
 	}
 	defer producer.Close()
 
+	// Send the message
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 

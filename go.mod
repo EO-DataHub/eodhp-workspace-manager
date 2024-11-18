@@ -3,7 +3,6 @@ module github.com/EO-DataHub/eodhp-workspace-manager
 go 1.22.4
 
 require (
-	github.com/UKEODHP/workspace-controller v0.0.0-20241002145836-988a443b037d
 	github.com/apache/pulsar-client-go v0.14.0
 	github.com/rs/zerolog v1.33.0
 	gopkg.in/yaml.v2 v2.4.0
@@ -16,6 +15,7 @@ require (
 	github.com/99designs/keyring v1.2.1 // indirect
 	github.com/AthenZ/athenz v1.10.39 // indirect
 	github.com/DataDog/zstd v1.5.0 // indirect
+	github.com/EO-DataHub/eodhp-workspace-controller v0.0.0-20241030113520-dc34582b6de4 // indirect
 	github.com/ardielle/ardielle-go v1.5.2 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/bits-and-blooms/bitset v1.4.0 // indirect
