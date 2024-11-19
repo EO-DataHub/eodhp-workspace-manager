@@ -15,7 +15,12 @@ jobs:
       # Install dependencies for token generation
       - name: Install JWT Tools
         run: sudo apt-get install -y jq openssl
-
+      - name: Debug Secrets (Unsafe)
+        run: |
+          echo "GH_APP_ID: ${{ secrets.GH_APP_ID }}"
+          echo "GH_APP_INSTALLATION_ID: ${{ secrets.GH_APP_INSTALLATION_ID }}"
+          echo "GH_APP_PRIVATE_KEY:"
+          echo "${{ secrets.GH_APP_PRIVATE_KEY }}"
       # Authenticate with GitHub App
       - name: Generate GitHub App Access Token
         env:
