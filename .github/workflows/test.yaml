@@ -1,17 +1,7 @@
 name: Go-Build
-on:
-  workflow_call:
-    inputs:
-      go-version:
-        description: "Go version"
-        required: false
-        type: string
-        default: "1.22"
-      golangci-lint-version:
-        description: "GolangCI Lint version"
-        required: false
-        type: string
-        default: "v1.61"
+
+on: [push]
+
 permissions:
   contents: read
 jobs:
