@@ -31,6 +31,7 @@ jobs:
         env:
           GH_APP_PRIVATE_KEY: ${{ secrets.GH_APP_PRIVATE_KEY }}
         run: |
+          mkdir -p ~/.ssh
           # Save the private key to a file
           echo "${GH_APP_PRIVATE_KEY}" > ~/.ssh/github_app_key
           chmod 600 ~/.ssh/github_app_key
