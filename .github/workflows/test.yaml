@@ -8,7 +8,6 @@ permissions:
 jobs:
   test:
     name: Build and Test
-    needs: auth
     runs-on: ubuntu-latest
     env:
       GOPRIVATE: github.com/EO-DataHub
