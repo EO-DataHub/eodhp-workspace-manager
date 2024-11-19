@@ -1,4 +1,4 @@
-name: Debug Go Build and Test
+name: Go Build and Test with GitHub App
 
 on: [push]
 
@@ -6,67 +6,61 @@ permissions:
   contents: read
 
 jobs:
-  setup-auth:
-    name: Authenticate with GitHub App
+  build-and-test:
     runs-on: ubuntu-latest
     steps:
-      - name: Install JWT Tool
+      # Checkout code
+      - uses: actions/checkout@v4
+
+      # Install dependencies for token generation
+      - name: Install JWT Tools
         run: sudo apt-get install -y jq openssl
-      - name: Echo GitHub App Secrets (DEBUGGING)
-        run: |
-          echo "GH_APP_ID: ${{ secrets.GH_APP_ID }}"
-          echo "GH_APP_INSTALLATION_ID: ${{ secrets.GH_APP_INSTALLATION_ID }}"
-          echo "GH_APP_PRIVATE_KEY (first 100 chars):"
-          echo "${{ secrets.GH_APP_PRIVATE_KEY }}" | head -c 100
-          echo "Note: Truncated for safety."
+
+      # Authenticate with GitHub App
       - name: Generate GitHub App Access Token
         env:
           GH_APP_ID: ${{ secrets.GH_APP_ID }}
           GH_APP_PRIVATE_KEY: ${{ secrets.GH_APP_PRIVATE_KEY }}
           GH_APP_INSTALLATION_ID: ${{ secrets.GH_APP_INSTALLATION_ID }}
         run: |
-          echo "Generating JWT..."
+          echo "Generating JWT for GitHub App..."
           now=$(date +%s)
           header='{"alg":"RS256","typ":"JWT"}'
           payload="{\"iat\":$((now - 60)),\"exp\":$((now + 600)),\"iss\":${GH_APP_ID}}"
-          echo "JWT Payload: $payload"
 
           unsigned_token=$(echo -n "${header}" | openssl base64 -e -A).$(echo -n "${payload}" | openssl base64 -e -A)
           export JWT=$(echo -n "${unsigned_token}" | openssl dgst -sha256 -sign <(echo "${GH_APP_PRIVATE_KEY}") | openssl base64 -e -A)
 
-          echo "JWT: $JWT (Truncated for safety)" | head -c 100
-
-          echo "Requesting GitHub App Access Token..."
+          echo "Requesting Access Token..."
           export GITHUB_TOKEN=$(curl -s -X POST \
             -H "Authorization: Bearer ${JWT}" \
             -H "Accept: application/vnd.github+json" \
             https://api.github.com/app/installations/${GH_APP_INSTALLATION_ID}/access_tokens | jq -r .token)
 
-          echo "Generated GITHUB_TOKEN (Truncated for safety):"
-          echo $GITHUB_TOKEN | head -c 100
-          echo "Note: Truncated for safety."
+          if [ "$GITHUB_TOKEN" == "null" ]; then
+            echo "Failed to generate GITHUB_TOKEN. Check app permissions and installation ID."
+            exit 1
+          fi
 
-          echo "Configuring Git for HTTPS Authentication..."
+          echo "Access token generated."
+
+          # Configure Git for HTTPS authentication
           git config --global url."https://x-access-token:${GITHUB_TOKEN}@github.com/".insteadOf "https://github.com/"
-          git config --list
-          echo "GOPRIVATE=github.com/EO-DataHub" >> $GITHUB_ENV
 
-  go-build:
-    name: Debug Build and Test
-    needs: setup-auth
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version: "1.22"
-      - name: Echo Go Environment Variables
+      # Set Go environment for private modules
+      - name: Configure Go Environment
         run: |
-          echo "Printing Go Environment Variables..."
-          go env
-      - name: Install dependencies with Debugging
-        run: |
-          echo "Downloading modules..."
           go env -w GOPRIVATE=github.com/EO-DataHub
+
+      # Install Go dependencies
+      - name: Install Dependencies
+        run: |
+          echo "Downloading Go modules..."
           go mod tidy
           go mod download
+
+      # Debug Git Access
+      - name: Debug Git Access
+        run: |
+          echo "Testing repository access..."
+          git ls-remote https://github.com/EO-DataHub/eodhp-workspace-controller.git
