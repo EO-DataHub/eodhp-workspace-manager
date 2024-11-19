@@ -6,7 +6,30 @@ permissions:
   contents: read
 
 jobs:
+  pulsar-setup:
+    runs-on: ubuntu-latest
+    services:
+      pulsar:
+        image: apachepulsar/pulsar:latest
+        ports:
+          - 6650:6650
+          - 8080:8080
+        options: >
+          --name pulsar
+          --entrypoint /bin/bash
+        command: >
+          -c "bin/pulsar standalone"
+    
+    steps:
+      - name: Wait for Pulsar to start
+        run: |
+          echo "Waiting for Pulsar to be ready..."
+          for i in {1..30}; do
+            nc -zv localhost 6650 && break
+            sleep 1
+          done
   go-build:
+    needs: pulsar-setup
     uses: EO-DataHub/github-actions/.github/workflows/go-build.yaml@main
     with:
       go-version: "1.22"

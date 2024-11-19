@@ -4,24 +4,28 @@ import (
 	"context"
 	"encoding/json"
 
-	"github.com/EO-DataHub/eodhp-workspace-manager/internal/manager"
 	"github.com/EO-DataHub/eodhp-workspace-manager/internal/utils"
 	"github.com/EO-DataHub/eodhp-workspace-manager/models"
 	"github.com/apache/pulsar-client-go/pulsar"
 	"github.com/rs/zerolog/log"
 )
 
+// WorkspaceOperatorInterface defines the methods required for processing messages
+type WorkspaceOperatorInterface interface {
+	ProcessMessage(ctx context.Context, payload models.WorkspaceSettings) error
+}
+
 // ConfigurationConsumer listens for messages on a Pulsar topic
 type ConfigurationConsumer struct {
 	Consumer pulsar.Consumer
-	Operator *manager.WorkspaceOperator
+	Operator WorkspaceOperatorInterface
 	Config   *utils.Config
 	ctx      context.Context
 	cancel   context.CancelFunc
 }
 
 // NewConfigurationConsumer creates a new Pulsar ConfigurationConsumer
-func NewConfigurationConsumer(client pulsar.Client, operator *manager.WorkspaceOperator, config *utils.Config) *ConfigurationConsumer {
+func NewConfigurationConsumer(client pulsar.Client, operator WorkspaceOperatorInterface, config *utils.Config) *ConfigurationConsumer {
 	consumer, err := client.Subscribe(pulsar.ConsumerOptions{
 		Topic:            config.Pulsar.TopicConsumer,
 		SubscriptionName: config.Pulsar.Subscription,
