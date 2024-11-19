@@ -70,6 +70,10 @@ jobs:
           # Create JWT
           JWT="${header_payload}"."${signature}"
 
+          # Configure Git to use SSH instead of HTTPS
+          git config --global --add url."git@github.com:".insteadOf "https://github.com/"
+
+
           # Save credentials for Go
           echo "machine github.com login x-access-token password ${JWT}" > ~/.netrc
 
