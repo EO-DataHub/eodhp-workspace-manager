@@ -26,64 +26,93 @@ jobs:
         with:
           go-version: ${{ inputs.go-version }}
 
-
-     # Configure GOPRIVATE for private module access
-      - name: Configure GOPRIVATE
-        run: |
-          echo "GOPRIVATE=github.com/EO-DataHub/*" >> $GITHUB_ENV
-
-      # Authenticate with GitHub App
-      - name: Authenticate with GitHub App
+      # Add SSH Key for Authentication
+      - name: Configure SSH Key for GitHub App
         env:
-          GH_CLIENT_ID: ${{ secrets.GH_CLIENT_ID }}
           GH_APP_PRIVATE_KEY: ${{ secrets.GH_APP_PRIVATE_KEY }}
         run: |
-          # Generate JWT
-          now=$(date +%s)
-          iat=$((${now} - 60)) # Issues 60 seconds in the past
-          exp=$((${now} + 600)) # Expires 10 minutes in the future
+          # Save the private key to a file
+          echo "${GH_APP_PRIVATE_KEY}" > ~/.ssh/github_app_key
+          chmod 600 ~/.ssh/github_app_key
 
-          b64enc() { openssl base64 | tr -d '=' | tr '/+' '_-' | tr -d '\n'; }
-
-          header_json='{
-              "typ":"JWT",
-              "alg":"RS256"
-          }'
-          # Header encode
-          header=$( echo -n "${header_json}" | b64enc )
-
-          payload_json="{
-              \"iat\":${iat},
-              \"exp\":${exp},
-              \"iss\":\"${GH_CLIENT_ID}\"
-          }"
-          # Payload encode
-          payload=$( echo -n "${payload_json}" | b64enc )
-
-          # Signature
-          header_payload="${header}"."${payload}"
-          signature=$(
-              openssl dgst -sha256 -sign <(echo -n "${GH_APP_PRIVATE_KEY}") \
-              <(echo -n "${header_payload}") | b64enc
-          )
-
-          # Create JWT
-          JWT="${header_payload}"."${signature}"
-
-          # Configure Git to use SSH instead of HTTPS
-          git config --global --add url."git@github.com:".insteadOf "https://github.com/"
-
-          # Save SSH key for authentication
-          echo "${GH_APP_PRIVATE_KEY}" > /tmp/github_app_key
-          chmod 600 /tmp/github_app_key
+          # Start the SSH agent and add the key
           eval "$(ssh-agent -s)"
-          ssh-add /tmp/github_app_key
+          ssh-add ~/.ssh/github_app_key
 
+          # Add GitHub to known_hosts to avoid SSH prompts
+          ssh-keyscan github.com >> ~/.ssh/known_hosts
 
-          # Save credentials for Go
-          echo "machine github.com login x-access-token password ${JWT}" > ~/.netrc
-
-      - name: Install dependencies
+      # Configure Git to Use SSH
+      - name: Configure Git
         run: |
+          git config --global --add url."git@github.com:".insteadOf "https://github.com/"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global user.name "github-actions[bot]"
+
+      # Install Dependencies
+      - name: Install Dependencies
+        run: |
+          go env -w GOPRIVATE="github.com/EO-DataHub/*" # Replace with your org/repo pattern
           go mod download
-          go install github.com/ctrf-io/go-ctrf-json-reporter/cmd/go-ctrf-json-reporter@latest
+
+
+     # Configure GOPRIVATE for private module access
+      # - name: Configure GOPRIVATE
+      #   run: |
+      #     echo "GOPRIVATE=github.com/EO-DataHub/*" >> $GITHUB_ENV
+
+      # # Authenticate with GitHub App
+      # - name: Authenticate with GitHub App
+      #   env:
+      #     GH_CLIENT_ID: ${{ secrets.GH_CLIENT_ID }}
+      #     GH_APP_PRIVATE_KEY: ${{ secrets.GH_APP_PRIVATE_KEY }}
+      #   run: |
+      #     # Generate JWT
+      #     now=$(date +%s)
+      #     iat=$((${now} - 60)) # Issues 60 seconds in the past
+      #     exp=$((${now} + 600)) # Expires 10 minutes in the future
+
+      #     b64enc() { openssl base64 | tr -d '=' | tr '/+' '_-' | tr -d '\n'; }
+
+      #     header_json='{
+      #         "typ":"JWT",
+      #         "alg":"RS256"
+      #     }'
+      #     # Header encode
+      #     header=$( echo -n "${header_json}" | b64enc )
+
+      #     payload_json="{
+      #         \"iat\":${iat},
+      #         \"exp\":${exp},
+      #         \"iss\":\"${GH_CLIENT_ID}\"
+      #     }"
+      #     # Payload encode
+      #     payload=$( echo -n "${payload_json}" | b64enc )
+
+      #     # Signature
+      #     header_payload="${header}"."${payload}"
+      #     signature=$(
+      #         openssl dgst -sha256 -sign <(echo -n "${GH_APP_PRIVATE_KEY}") \
+      #         <(echo -n "${header_payload}") | b64enc
+      #     )
+
+      #     # Create JWT
+      #     JWT="${header_payload}"."${signature}"
+
+      #     # Configure Git to use SSH instead of HTTPS
+      #     git config --global --add url."git@github.com:".insteadOf "https://github.com/"
+
+      #     # Save SSH key for authentication
+      #     echo "${GH_APP_PRIVATE_KEY}" > /tmp/github_app_key
+      #     chmod 600 /tmp/github_app_key
+      #     eval "$(ssh-agent -s)"
+      #     ssh-add /tmp/github_app_key
+
+
+      #     # Save credentials for Go
+      #     echo "machine github.com login x-access-token password ${JWT}" > ~/.netrc
+
+      # - name: Install dependencies
+      #   run: |
+      #     go mod download
+      #     go install github.com/ctrf-io/go-ctrf-json-reporter/cmd/go-ctrf-json-reporter@latest
