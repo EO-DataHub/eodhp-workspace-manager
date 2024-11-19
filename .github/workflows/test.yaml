@@ -73,6 +73,12 @@ jobs:
           # Configure Git to use SSH instead of HTTPS
           git config --global --add url."git@github.com:".insteadOf "https://github.com/"
 
+          # Save SSH key for authentication
+          echo "${GH_APP_PRIVATE_KEY}" > /tmp/github_app_key
+          chmod 600 /tmp/github_app_key
+          eval "$(ssh-agent -s)"
+          ssh-add /tmp/github_app_key
+
 
           # Save credentials for Go
           echo "machine github.com login x-access-token password ${JWT}" > ~/.netrc
