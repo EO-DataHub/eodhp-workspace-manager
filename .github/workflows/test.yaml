@@ -16,9 +16,8 @@ jobs:
           - 8080:8080
         options: >
           --name pulsar
-          --entrypoint /bin/bash
-        entrypoint: /bin/bash
-        args: -c "bin/pulsar standalone"
+          --entrypoint ""
+          /bin/bash -c "bin/pulsar standalone"
     
     steps:
       - name: Wait for Pulsar to start
