@@ -1,71 +1,89 @@
-name: Go Build and Test with GitHub App
-
-on: [push]
-
+name: Go-Build
+on:
+  workflow_call:
+    inputs:
+      go-version:
+        description: "Go version"
+        required: false
+        type: string
+        default: "1.22"
+      golangci-lint-version:
+        description: "GolangCI Lint version"
+        required: false
+        type: string
+        default: "v1.61"
 permissions:
   contents: read
-
 jobs:
-  build-and-test:
+  lint:
+    name: Lint
     runs-on: ubuntu-latest
     steps:
-      # Checkout code
       - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ inputs.go-version }}
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: ${{ inputs.golangci-lint-version }}
+  test:
+    name: Build and test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ inputs.go-version }}
 
-      # Install dependencies for token generation
-      - name: Install JWT Tools
-        run: sudo apt-get install -y jq openssl
-      - name: Debug Secrets (Unsafe)
+
+     # Configure GOPRIVATE for private module access
+      - name: Configure GOPRIVATE
         run: |
-          echo "GH_APP_ID: ${{ secrets.GH_APP_ID }}"
-          echo "GH_APP_INSTALLATION_ID: ${{ secrets.GH_APP_INSTALLATION_ID }}"
-          echo "GH_APP_PRIVATE_KEY:"
-          echo "${{ secrets.GH_APP_PRIVATE_KEY }}"
+          echo "GOPRIVATE=github.com/EO-DataHub/*" >> $GITHUB_ENV
+
       # Authenticate with GitHub App
-      - name: Generate GitHub App Access Token
+      - name: Authenticate with GitHub App
         env:
-          GH_APP_ID: ${{ secrets.GH_APP_ID }}
+          GH_CLIENT_ID: ${{ secrets.GH_CLIENT_ID }}
           GH_APP_PRIVATE_KEY: ${{ secrets.GH_APP_PRIVATE_KEY }}
-          GH_APP_INSTALLATION_ID: ${{ secrets.GH_APP_INSTALLATION_ID }}
         run: |
-          echo "Generating JWT for GitHub App..."
+          # Generate JWT
           now=$(date +%s)
-          header='{"alg":"RS256","typ":"JWT"}'
-          payload="{\"iat\":$((now - 60)),\"exp\":$((now + 600)),\"iss\":${GH_APP_ID}}"
+          iat=$((${now} - 60)) # Issues 60 seconds in the past
+          exp=$((${now} + 600)) # Expires 10 minutes in the future
 
-          unsigned_token=$(echo -n "${header}" | openssl base64 -e -A).$(echo -n "${payload}" | openssl base64 -e -A)
-          export JWT=$(echo -n "${unsigned_token}" | openssl dgst -sha256 -sign <(echo "${GH_APP_PRIVATE_KEY}") | openssl base64 -e -A)
+          b64enc() { openssl base64 | tr -d '=' | tr '/+' '_-' | tr -d '\n'; }
 
-          echo "Requesting Access Token..."
-          export GITHUB_TOKEN=$(curl -s -X POST \
-            -H "Authorization: Bearer ${JWT}" \
-            -H "Accept: application/vnd.github+json" \
-            https://api.github.com/app/installations/${GH_APP_INSTALLATION_ID}/access_tokens | jq -r .token)
+          header_json='{
+              "typ":"JWT",
+              "alg":"RS256"
+          }'
+          # Header encode
+          header=$( echo -n "${header_json}" | b64enc )
 
-          if [ "$GITHUB_TOKEN" == "null" ]; then
-            echo "Failed to generate GITHUB_TOKEN. Check app permissions and installation ID."
-            exit 1
-          fi
+          payload_json="{
+              \"iat\":${iat},
+              \"exp\":${exp},
+              \"iss\":\"${GH_CLIENT_ID}\"
+          }"
+          # Payload encode
+          payload=$( echo -n "${payload_json}" | b64enc )
 
-          echo "Access token generated."
+          # Signature
+          header_payload="${header}"."${payload}"
+          signature=$(
+              openssl dgst -sha256 -sign <(echo -n "${GH_APP_PRIVATE_KEY}") \
+              <(echo -n "${header_payload}") | b64enc
+          )
 
-          # Configure Git for HTTPS authentication
-          git config --global url."https://x-access-token:${GITHUB_TOKEN}@github.com/".insteadOf "https://github.com/"
+          # Create JWT
+          JWT="${header_payload}"."${signature}"
 
-      # Set Go environment for private modules
-      - name: Configure Go Environment
+          # Save credentials for Go
+          echo "machine github.com login x-access-token password ${JWT}" > ~/.netrc
+
+      - name: Install dependencies
         run: |
-          go env -w GOPRIVATE=github.com/EO-DataHub
-
-      # Install Go dependencies
-      - name: Install Dependencies
-        run: |
-          echo "Downloading Go modules..."
-          go mod tidy
           go mod download
-
-      # Debug Git Access
-      - name: Debug Git Access
-        run: |
-          echo "Testing repository access..."
-          git ls-remote https://github.com/EO-DataHub/eodhp-workspace-controller.git
+          go install github.com/ctrf-io/go-ctrf-json-reporter/cmd/go-ctrf-json-reporter@latest
