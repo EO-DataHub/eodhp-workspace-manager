@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/EO-DataHub/eodhp-workspace-controller/api/v1alpha1"
-	workspacev1alpha1 "github.com/EO-DataHub/eodhp-workspace-controller/api/v1alpha1"
+
 	"github.com/apache/pulsar-client-go/pulsar"
 	"github.com/stretchr/testify/assert"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -44,7 +44,7 @@ func TestNewStatusPublisher(t *testing.T) {
 
 	// Create a fake K8s client
 	scheme := runtime.NewScheme()
-	_ = workspacev1alpha1.AddToScheme(scheme)
+	_ = v1alpha1.AddToScheme(scheme)
 	mockK8sClient := fake.NewClientBuilder().WithScheme(scheme).Build()
 
 	// Create a new StatusPublisher

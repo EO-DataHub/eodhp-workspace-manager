@@ -3,7 +3,9 @@ package events
 import (
 	"context"
 	"encoding/json"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/EO-DataHub/eodhp-workspace-manager/internal/utils"
 	"github.com/EO-DataHub/eodhp-workspace-manager/models"
@@ -195,4 +197,97 @@ func TestConfigurationConsumer_Stop(t *testing.T) {
 	default:
 		assert.Fail(t, "Context should be canceled")
 	}
+}
+
+func TestConfigurationConsumer_Start(t *testing.T) {
+
+	// Create a context with cancel
+	ctx, cancel := context.WithCancel(context.Background())
+
+	// Ensure the context is canceled to prevent goroutine leaks
+	defer cancel()
+
+	// Mock Pulsar message with a valid (BASIC) WorkspaceSettings payload
+	mockMessage := &MockPulsarMessage{
+		PayloadData: []byte(`{"name": "test-workspace", "status": "creating"}`),
+	}
+
+	// Channel to signal message processing
+	messageProcessed := make(chan struct{})
+
+	// Ensures messageProcessed is closed only once
+	var ackOnce sync.Once
+
+	// Mock Consumer to simulate receiving and acknowledging a message
+	mockConsumer := &MockConsumer{
+		ReceiveFunc: func(ctx context.Context) (pulsar.Message, error) {
+			return mockMessage, nil
+		},
+		AckFunc: func(msg pulsar.Message) error {
+			assert.Equal(t, mockMessage, msg)
+			ackOnce.Do(func() {
+				close(messageProcessed)
+			})
+			return nil
+		},
+	}
+
+	// Mock WorkspaceOperator to validate the payload passed to ProcessMessage
+	mockOperator := &MockWorkspaceOperator{
+		ProcessMessageFunc: func(ctx context.Context, payload models.WorkspaceSettings) error {
+			assert.Equal(t, "test-workspace", payload.Name)
+			return nil
+		},
+	}
+
+	// Create ConfigurationConsumer instance
+	consumer := &ConfigurationConsumer{
+		Consumer: mockConsumer,
+		Operator: mockOperator,
+		Config:   &utils.Config{},
+		ctx:      ctx,
+		cancel:   cancel,
+	}
+
+	// Run Start in a separate goroutine
+	go consumer.Start()
+
+	// Wait for the message to be processed or timeout
+	select {
+	case <-messageProcessed:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Test timed out waiting for message to be processed")
+	}
+
+	// Ensure the context cancellation stops the consumer
+	cancel()
+}
+
+func TestConfigurationConsumer_handleMessage_InvalidPayload(t *testing.T) {
+
+	// Mock Pulsar message with an invalid JSON payload
+	mockMessage := &MockPulsarMessage{
+		PayloadData: []byte(`invalid-json`), // Invalid JSON payload
+	}
+
+	// Mock Consumer to verify that Nack is called
+	mockConsumer := &MockConsumer{
+		NackFunc: func(msg pulsar.Message) {
+			assert.Equal(t, mockMessage, msg)
+		},
+	}
+
+	// Mock WorkspaceOperator to simulate an error during ProcessMessage
+	mockOperator := &MockWorkspaceOperator{}
+
+	// Create ConfigurationConsumer instance
+	consumer := &ConfigurationConsumer{
+		Consumer: mockConsumer,
+		Operator: mockOperator,
+		Config:   &utils.Config{},
+		ctx:      context.Background(),
+	}
+
+	// Call handleMessage
+	consumer.handleMessage(mockMessage)
 }

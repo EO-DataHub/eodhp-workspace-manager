@@ -11,6 +11,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 )
 
+// K8sInterface is an interface for the Kubernetes client
 type K8sInterface interface {
 	CreateWorkspace(ctx context.Context, req models.WorkspaceSettings) error
 	UpdateWorkspace(ctx context.Context, req models.WorkspaceSettings) error
