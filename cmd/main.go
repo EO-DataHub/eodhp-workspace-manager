@@ -11,13 +11,36 @@ import (
 	"github.com/EO-DataHub/eodhp-workspace-manager/internal/manager"
 	"github.com/EO-DataHub/eodhp-workspace-manager/internal/utils"
 	"github.com/rs/zerolog/log"
+	"github.com/spf13/cobra"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
-func main() {
+var (
+	configFile string
+	rootCmd    = &cobra.Command{
+		Use:   "workspace-manager",
+		Short: "Workspace Manager CLI",
+		Long:  "A CLI to manage workspaces with Kubernetes and Pulsar integration.",
+		Run:   runWorkspaceManager,
+	}
+)
 
-	// Initialize configuration
-	appConfig := utils.LoadConfig()
+// init initializes the root command
+func init() {
+	rootCmd.PersistentFlags().StringVar(&configFile, "config", "config.yaml", "Path to configuration file")
+}
+
+func main() {
+	// Execute the root command
+	if err := rootCmd.Execute(); err != nil {
+		log.Fatal().Err(err).Msg("Failed to execute command")
+	}
+}
+
+// runWorkspaceManager is the main entry point for the Workspace Manager
+func runWorkspaceManager(cmd *cobra.Command, args []string) {
+	// Load configuration
+	appConfig := utils.LoadConfig(configFile)
 
 	// Initialize logger
 	utils.InitLogger(appConfig.LogLevel)
@@ -62,5 +85,4 @@ func main() {
 
 	log.Info().Msg("Shutting down Workspace Manager...")
 	configurationConsumer.Stop()
-
 }

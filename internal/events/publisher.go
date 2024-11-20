@@ -17,12 +17,12 @@ import (
 // StatusPublisher publishes Workspace status updates to a Pulsar topic
 type StatusPublisher struct {
 	k8sClient    client.Client
-	pulsarClient pulsar.Client
+	pulsarClient PulsarClient
 	topic        string
 }
 
 // NewStatusPublisher initializes a new StatusPublisher
-func NewStatusPublisher(k8sClient client.Client, pulsarClient pulsar.Client, topic string) *StatusPublisher {
+func NewStatusPublisher(k8sClient client.Client, pulsarClient PulsarClient, topic string) *StatusPublisher {
 	return &StatusPublisher{
 		k8sClient:    k8sClient,
 		pulsarClient: pulsarClient,
@@ -80,6 +80,8 @@ func (w *StatusPublisher) handleUpdate(oldObj, newObj interface{}) {
 		log.Error().Err(err).Msg("Failed to serialize status update")
 		return
 	}
+
+	log.Info().Msg("Status Update..")
 
 	// Send the status update to Pulsar
 	if err := w.sendStatusUpdate(statusBytes); err != nil {

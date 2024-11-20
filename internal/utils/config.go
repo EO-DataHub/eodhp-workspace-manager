@@ -38,9 +38,9 @@ type Config struct {
 }
 
 // LoadConfig loads the application configuration from a file
-func LoadConfig() *Config {
+func LoadConfig(configPath string) *Config {
 	// Get the config file path from the environment variable
-	configPath := "/home/jlangstone/Work/UKEODHP/eodhp-workspace-manager/tmp/config.yaml"
+	//configPath := "/home/jlangstone/Work/UKEODHP/eodhp-workspace-manager/tmp/config.yaml"
 
 	// Parse the configuration file as a template
 	tmpl, err := template.ParseFiles(configPath)

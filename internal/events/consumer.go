@@ -10,6 +10,14 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
+// ConsumerInterface defines the methods required for a Pulsar consumer
+type ConsumerInterface interface {
+	Receive(ctx context.Context) (pulsar.Message, error)
+	Ack(msg pulsar.Message) error
+	Nack(msg pulsar.Message)
+	Close()
+}
+
 // WorkspaceOperatorInterface defines the methods required for processing messages
 type WorkspaceOperatorInterface interface {
 	ProcessMessage(ctx context.Context, payload models.WorkspaceSettings) error
@@ -17,7 +25,7 @@ type WorkspaceOperatorInterface interface {
 
 // ConfigurationConsumer listens for messages on a Pulsar topic
 type ConfigurationConsumer struct {
-	Consumer pulsar.Consumer
+	Consumer ConsumerInterface
 	Operator WorkspaceOperatorInterface
 	Config   *utils.Config
 	ctx      context.Context
@@ -25,7 +33,7 @@ type ConfigurationConsumer struct {
 }
 
 // NewConfigurationConsumer creates a new Pulsar ConfigurationConsumer
-func NewConfigurationConsumer(client pulsar.Client, operator WorkspaceOperatorInterface, config *utils.Config) *ConfigurationConsumer {
+func NewConfigurationConsumer(client PulsarClient, operator WorkspaceOperatorInterface, config *utils.Config) *ConfigurationConsumer {
 	consumer, err := client.Subscribe(pulsar.ConsumerOptions{
 		Topic:            config.Pulsar.TopicConsumer,
 		SubscriptionName: config.Pulsar.Subscription,

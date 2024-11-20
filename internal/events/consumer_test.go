@@ -3,84 +3,196 @@ package events
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"testing"
-	"time"
 
 	"github.com/EO-DataHub/eodhp-workspace-manager/internal/utils"
 	"github.com/EO-DataHub/eodhp-workspace-manager/models"
 	"github.com/apache/pulsar-client-go/pulsar"
-	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/assert"
 )
 
-type MockWorkspaceOperator struct {
-	ProcessedMessages []models.WorkspaceSettings
-	FailProcessing    bool
+// MockConsumer is a mock implementation of the Pulsar Consumer interface
+type MockConsumer struct {
+	pulsar.Consumer
+	ReceiveFunc func(ctx context.Context) (pulsar.Message, error)
+	AckFunc     func(msg pulsar.Message) error
+	NackFunc    func(msg pulsar.Message)
+	CloseFunc   func()
 }
 
-func (m *MockWorkspaceOperator) ProcessMessage(ctx context.Context, payload models.WorkspaceSettings) error {
-	if m.FailProcessing {
-		return errors.New("simulated processing error")
+// Receive receives a message from the Pulsar topic
+func (m *MockConsumer) Receive(ctx context.Context) (pulsar.Message, error) {
+	if m.ReceiveFunc != nil {
+		return m.ReceiveFunc(ctx)
 	}
-	m.ProcessedMessages = append(m.ProcessedMessages, payload)
+	return nil, nil
+}
+
+// Ack acknowledges a message
+func (m *MockConsumer) Ack(msg pulsar.Message) error {
+	if m.AckFunc != nil {
+		return m.AckFunc(msg)
+	}
 	return nil
 }
 
-func TestConfigurationConsumer(t *testing.T) {
-	// Get Pulsar URL from environment
-	pulsarURL := "pulsar://localhost:6650"
-	require.NotEmpty(t, pulsarURL, "PULSAR_URL must be set for the test")
+// Nack negatively acknowledges a message
+func (m *MockConsumer) Nack(msg pulsar.Message) {
+	if m.NackFunc != nil {
+		m.NackFunc(msg)
+	}
+}
 
-	// Set up Pulsar client
-	client, err := pulsar.NewClient(pulsar.ClientOptions{
-		URL: pulsarURL,
-	})
-	require.NoError(t, err)
-	defer client.Close()
+// Close closes the consumer
+func (m *MockConsumer) Close() {
+	if m.CloseFunc != nil {
+		m.CloseFunc()
+	}
+}
 
-	// Define a test topic and subscription
-	topic := "test-topic"
-	subscription := "test-subscription"
+// MockWorkspaceOperator is a mock implementation of the WorkspaceOperator interface
+type MockWorkspaceOperator struct {
+	ProcessMessageFunc func(ctx context.Context, payload models.WorkspaceSettings) error
+}
 
-	// Set up a mock operator
-	mockOperator := &MockWorkspaceOperator{}
+// ProcessMessage processes a message from a Pulsar topic
+func (m *MockWorkspaceOperator) ProcessMessage(ctx context.Context, payload models.WorkspaceSettings) error {
+	if m.ProcessMessageFunc != nil {
+		return m.ProcessMessageFunc(ctx, payload)
+	}
+	return nil
+}
 
-	// Create a test configuration
-	config := &utils.Config{
-		Pulsar: utils.PulsarConfig{
-			TopicConsumer: topic,
-			Subscription:  subscription,
+// MockPulsarMessage is a mock implementation of the Pulsar Message interface
+type MockPulsarMessage struct {
+	pulsar.Message
+	PayloadData []byte
+}
+
+// Payload returns the message payload
+func (m *MockPulsarMessage) Payload() []byte {
+	return m.PayloadData
+}
+
+func TestConfigurationConsumer_handleMessage_Success(t *testing.T) {
+
+	// Mock Pulsar message with a valid (BASIC) WorkspaceSettings payload
+	mockMessage := &MockPulsarMessage{
+		PayloadData: func() []byte {
+			payload, _ := json.Marshal(models.WorkspaceSettings{
+				Name:   "test-workspace",
+				Status: "creating",
+			})
+			return payload
+		}(),
+	}
+
+	// Mock Consumer to verify that Ack is called and Nack is not
+	mockConsumer := &MockConsumer{
+		AckFunc: func(msg pulsar.Message) error {
+			assert.Equal(t, mockMessage, msg)
+			return nil
+		},
+		NackFunc: func(msg pulsar.Message) {
+			assert.Fail(t, "Nack should not be called")
 		},
 	}
 
-	// Create the consumer
-	consumer := NewConfigurationConsumer(client, mockOperator, config)
-	defer consumer.Stop()
+	// Mock WorkspaceOperator to validate the payload passed to ProcessMessage
+	mockOperator := &MockWorkspaceOperator{
+		ProcessMessageFunc: func(ctx context.Context, payload models.WorkspaceSettings) error {
+			assert.Equal(t, "test-workspace", payload.Name)
+			return nil
+		},
+	}
 
-	// Start the consumer
-	go consumer.Start()
+	// Create ConfigurationConsumer instance
+	consumer := &ConfigurationConsumer{
+		Consumer: mockConsumer,
+		Operator: mockOperator,
+		Config:   &utils.Config{},
+		ctx:      context.Background(),
+	}
 
-	// Set up a producer to send messages
-	producer, err := client.CreateProducer(pulsar.ProducerOptions{
-		Topic: topic,
-	})
-	require.NoError(t, err)
-	defer producer.Close()
+	// Call handleMessage with the mock message
+	consumer.handleMessage(mockMessage)
+}
 
-	// Send a test message
-	testPayload := models.WorkspaceSettings{Name: "TestWorkspace"}
-	message, err := json.Marshal(testPayload)
-	require.NoError(t, err)
+func TestConfigurationConsumer_handleMessage_OperatorError(t *testing.T) {
 
-	_, err = producer.Send(context.Background(), &pulsar.ProducerMessage{
-		Payload: message,
-	})
-	require.NoError(t, err)
+	// Mock Pulsar message with a valid (BASIC) WorkspaceSettings payload
+	mockMessage := &MockPulsarMessage{
+		PayloadData: func() []byte {
+			payload, _ := json.Marshal(models.WorkspaceSettings{
+				Name:   "test-workspace",
+				Status: "creating",
+			})
+			return payload
+		}(),
+	}
 
-	// Wait for the consumer to process the message
-	time.Sleep(2 * time.Second)
+	// Mock Consumer to verify that Nack is called and Ack is not
+	mockConsumer := &MockConsumer{
+		AckFunc: func(msg pulsar.Message) error {
+			assert.Fail(t, "Ack should not be called")
+			return nil
+		},
+		NackFunc: func(msg pulsar.Message) {
+			assert.Equal(t, mockMessage, msg)
+		},
+	}
 
-	// Verify the message was processed
-	require.Len(t, mockOperator.ProcessedMessages, 1)
-	require.Equal(t, "TestWorkspace", mockOperator.ProcessedMessages[0].Name)
+	// Mock WorkspaceOperator to simulate an error during ProcessMessage
+	mockOperator := &MockWorkspaceOperator{
+		ProcessMessageFunc: func(ctx context.Context, payload models.WorkspaceSettings) error {
+			assert.Equal(t, "test-workspace", payload.Name)
+			return assert.AnError
+		},
+	}
+
+	// Create ConfigurationConsumer instance
+	consumer := &ConfigurationConsumer{
+		Consumer: mockConsumer,
+		Operator: mockOperator,
+		Config:   &utils.Config{},
+		ctx:      context.Background(),
+	}
+
+	// Call handleMessage
+	consumer.handleMessage(mockMessage)
+}
+
+func TestConfigurationConsumer_Stop(t *testing.T) {
+
+	// Create a context with cancel
+	ctx, cancel := context.WithCancel(context.Background())
+	consumerClosed := false
+
+	// Mock Consumer to verify that Close is called
+	mockConsumer := &MockConsumer{
+		CloseFunc: func() {
+			consumerClosed = true
+		},
+	}
+
+	// Create ConfigurationConsumer instance
+	consumer := &ConfigurationConsumer{
+		Consumer: mockConsumer,
+		Config:   &utils.Config{},
+		ctx:      ctx,
+		cancel:   cancel,
+	}
+
+	// Call Stop to close the consumer and cancel the context
+	consumer.Stop()
+
+	// Verify the consumer is closed
+	assert.True(t, consumerClosed, "Consumer should be closed")
+
+	// Verify the context is canceled
+	select {
+	case <-ctx.Done():
+	default:
+		assert.Fail(t, "Context should be canceled")
+	}
 }
