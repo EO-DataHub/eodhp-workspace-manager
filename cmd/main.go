@@ -2,14 +2,15 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"os/signal"
 	"syscall"
 
-	"github.com/EO-DataHub/eodhp-workspace-manager/internal/events"
 	"github.com/EO-DataHub/eodhp-workspace-manager/internal/k8s"
-	"github.com/EO-DataHub/eodhp-workspace-manager/internal/manager"
 	"github.com/EO-DataHub/eodhp-workspace-manager/internal/utils"
+	"github.com/EO-DataHub/eodhp-workspace-manager/models"
+	"github.com/apache/pulsar-client-go/pulsar"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -47,12 +48,40 @@ func runWorkspaceManager(cmd *cobra.Command, args []string) {
 	log.Info().Msg("Workspace Manager starting...")
 
 	// Initialize Pulsar client
-	pulsarClient := events.NewPulsarClient(appConfig.Pulsar.URL)
-
-	// Start Kubernetes manager to monitor 'Workspace' CR status changes
-	k8sMgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{})
+	pulsarClient, err := pulsar.NewClient(pulsar.ClientOptions{URL: appConfig.Pulsar.URL})
 	if err != nil {
-		log.Fatal().Err(err).Msg("Failed to create Kubernetes manager")
+		log.Fatal().Err(err).Msg("Failed to create Pulsar Client")
+	}
+	defer pulsarClient.Close()
+
+	// Producer for workspace-status topic
+	statusProducer, err := pulsarClient.CreateProducer(pulsar.ProducerOptions{
+		Topic: appConfig.Pulsar.TopicProducer,
+	})
+	if err != nil {
+		log.Fatal().Err(err).Msg("Failed to create Pulsar producer for workspace-status")
+	}
+	defer statusProducer.Close()
+
+	// Consumer for workspace-settings topic
+	settingsConsumer, err := pulsarClient.Subscribe(pulsar.ConsumerOptions{
+		Topic:            appConfig.Pulsar.TopicConsumer,
+		SubscriptionName: appConfig.Pulsar.Subscription,
+		Type:             pulsar.Shared,
+	})
+	if err != nil {
+		log.Fatal().Err(err).Msg("Failed to create Pulsar consumer for workspace-settings")
+	}
+	defer settingsConsumer.Close()
+
+	// Initialize the channels
+	chanWorkspaceStatus := make(chan models.WorkspaceStatus, 100)
+	chanWorkspaceSettings := make(chan models.WorkspaceSettings, 100)
+
+	// Initialize Kubernetes manager
+	k8sMgr, err := k8s.InitializeManager()
+	if err != nil {
+		log.Fatal().Err(err).Msg("Failed to initialize Kubernetes manager")
 	}
 
 	// Start the Kubernetes manager
@@ -62,27 +91,56 @@ func runWorkspaceManager(cmd *cobra.Command, args []string) {
 		}
 	}()
 
-	// Initialize WorkspaceController to manage Workspace CRUD operations
-	k8sClient := k8s.NewClient(appConfig)
-	workspaceController := manager.NewWorkspaceOperator(k8sClient, pulsarClient)
-
-	// Start StatusPublisher to detect status changes and publish updates
-	statusPublisher := events.NewStatusPublisher(k8sMgr.GetClient(), pulsarClient, appConfig.Pulsar.TopicProducer)
+	// Listen for updates to workspace CR status and send updates to workspace-status topic
 	go func() {
-		if err := statusPublisher.Start(context.Background(), k8sMgr); err != nil {
-			log.Fatal().Err(err).Msg("Failed to start StatusWatcher")
+		if err := k8s.ListenForWorkspaceStatusUpdates(context.Background(), k8sMgr, chanWorkspaceStatus); err != nil {
+			log.Fatal().Err(err).Msg("Failed to start informer")
 		}
 	}()
 
-	// Start ConfigurationConsumer to process messages and apply CRUD operations
-	configurationConsumer := events.NewConfigurationConsumer(pulsarClient, workspaceController, appConfig)
-	go configurationConsumer.Start()
+	// Start the consumer loop to process workspace-settings messages
+	go func() {
+		for {
+			msg, err := settingsConsumer.Receive(context.Background())
+			if err != nil {
+				// No message - carry on
+				continue
+			}
+
+			// Parse the message into WorkspaceSettings
+			var payload models.WorkspaceSettings
+			if err := json.Unmarshal(msg.Payload(), &payload); err != nil {
+				log.Error().Err(err).Msg("Failed to unmarshal workspace-settings message")
+				settingsConsumer.Nack(msg)
+				continue
+			}
+
+			// Send the payload to the workspaceSettings channel
+			select {
+			case chanWorkspaceSettings <- payload:
+				settingsConsumer.Ack(msg)
+			default:
+				log.Warn().Msg("Workspace settings channel is full; dropping message")
+				settingsConsumer.Nack(msg)
+			}
+		}
+	}()
+
+	// Process workspace settings from the channel
+	go func() {
+		for payload := range chanWorkspaceSettings {
+			// Process the message with k8sMgr.GetClient()
+			if err := k8s.ProcessWorkspace(context.Background(), k8sMgr.GetClient(), appConfig, payload); err != nil {
+				log.Error().Err(err).Msgf("Failed to process workspace action: %s", payload.Status)
+			} else {
+				log.Info().Msgf("Successfully processed workspace action: %s", payload.Status)
+			}
+		}
+	}()
 
 	// Handle graceful shutdown
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
 	<-stop
-
 	log.Info().Msg("Shutting down Workspace Manager...")
-	configurationConsumer.Stop()
 }

@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	workspacev1alpha1 "github.com/EO-DataHub/eodhp-workspace-controller/api/v1alpha1"
+	"github.com/EO-DataHub/eodhp-workspace-manager/internal/utils"
 	"github.com/EO-DataHub/eodhp-workspace-manager/models"
 	"github.com/rs/zerolog/log"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -12,14 +13,14 @@ import (
 )
 
 // MapObjectStoresToS3Buckets maps ObjectStores to S3Buckets
-func (c *K8sClient) MapObjectStoresToS3Buckets(workspaceName string, objectStores []models.ObjectStore) []workspacev1alpha1.S3Bucket {
+func MapObjectStoresToS3Buckets(workspaceName string, c *utils.Config, objectStores []models.ObjectStore) []workspacev1alpha1.S3Bucket {
 	var buckets []workspacev1alpha1.S3Bucket
 	for _, obj := range objectStores {
 		buckets = append(buckets, workspacev1alpha1.S3Bucket{
 			Name:            obj.Name,
 			Path:            obj.Path,
 			EnvVar:          obj.EnvVar,
-			AccessPointName: fmt.Sprintf("%s-%s-s3", c.Config.AWS.Cluster, workspaceName),
+			AccessPointName: fmt.Sprintf("%s-%s-s3", c.AWS.Cluster, workspaceName),
 		})
 	}
 
@@ -27,12 +28,12 @@ func (c *K8sClient) MapObjectStoresToS3Buckets(workspaceName string, objectStore
 }
 
 // MapBlockStoresToEFSAccessPoints maps BlockStores to EFSAccessPoints
-func (c *K8sClient) MapBlockStoresToEFSAccessPoints(workspaceName string, blockStores []models.BlockStore) []workspacev1alpha1.EFSAccess {
+func MapBlockStoresToEFSAccessPoints(workspaceName string, c *utils.Config, blockStores []models.BlockStore) []workspacev1alpha1.EFSAccess {
 	var accessPoints []workspacev1alpha1.EFSAccess
 	for _, block := range blockStores {
 		accessPoints = append(accessPoints, workspacev1alpha1.EFSAccess{
 			Name:          block.Name,
-			FSID:          c.Config.AWS.FSID,
+			FSID:          c.AWS.FSID,
 			RootDirectory: "/workspaces/" + workspaceName,
 			User: workspacev1alpha1.User{
 				UID: 1000, // Default UID
@@ -45,27 +46,27 @@ func (c *K8sClient) MapBlockStoresToEFSAccessPoints(workspaceName string, blockS
 }
 
 // GenerateStorageConfig generates a StorageSpec for a Workspace based on the workspace name
-func (c *K8sClient) GenerateStorageConfig(workspaceName string) workspacev1alpha1.StorageSpec {
+func GenerateStorageConfig(workspaceName string, c *utils.Config) workspacev1alpha1.StorageSpec {
 	pvName := fmt.Sprintf("pv-%s-workspace", workspaceName)
 
 	return workspacev1alpha1.StorageSpec{
 		PersistentVolumes: []workspacev1alpha1.PVSpec{
 			{
 				Name:         pvName,
-				StorageClass: c.Config.Storage.StorageClass,
-				Size:         c.Config.Storage.Size,
+				StorageClass: c.Storage.StorageClass,
+				Size:         c.Storage.Size,
 				VolumeSource: &workspacev1alpha1.VolumeSource{
-					Driver:          c.Config.Storage.Driver,
-					AccessPointName: fmt.Sprintf("%s-%s-pv", c.Config.AWS.Cluster, workspaceName),
+					Driver:          c.Storage.Driver,
+					AccessPointName: fmt.Sprintf("%s-%s-pv", c.AWS.Cluster, workspaceName),
 				},
 			},
 		},
 		PersistentVolumeClaims: []workspacev1alpha1.PVCSpec{
 			{
 				PVSpec: workspacev1alpha1.PVSpec{
-					Name:         c.Config.Storage.PVCName,
-					StorageClass: c.Config.Storage.StorageClass,
-					Size:         c.Config.Storage.Size,
+					Name:         c.Storage.PVCName,
+					StorageClass: c.Storage.StorageClass,
+					Size:         c.Storage.Size,
 				},
 				PVName: pvName,
 			},
@@ -74,21 +75,21 @@ func (c *K8sClient) GenerateStorageConfig(workspaceName string) workspacev1alpha
 }
 
 // buildWorkspace creates a Workspace object based on the provided WorkspaceSettings
-func (c *K8sClient) buildWorkspace(req models.WorkspaceSettings) *workspacev1alpha1.Workspace {
+func buildWorkspace(req models.WorkspaceSettings, c *utils.Config) *workspacev1alpha1.Workspace {
 	var s3Buckets []workspacev1alpha1.S3Bucket
 	var efsAccessPoints []workspacev1alpha1.EFSAccess
 
 	if req.Stores != nil {
 		for _, store := range *req.Stores {
 			// Map ObjectStores to S3Buckets
-			s3Buckets = append(s3Buckets, c.MapObjectStoresToS3Buckets(req.Name, store.Object)...)
+			s3Buckets = append(s3Buckets, MapObjectStoresToS3Buckets(req.Name, c, store.Object)...)
 			// Map BlockStores to EFSAccessPoints
-			efsAccessPoints = append(efsAccessPoints, c.MapBlockStoresToEFSAccessPoints(req.Name, store.Block)...)
+			efsAccessPoints = append(efsAccessPoints, MapBlockStoresToEFSAccessPoints(req.Name, c, store.Block)...)
 		}
 	}
 
 	// Generate storage configuration based on workspace name
-	storageConfig := c.GenerateStorageConfig(req.Name)
+	storageConfig := GenerateStorageConfig(req.Name, c)
 
 	// Create the Workspace object
 	return &workspacev1alpha1.Workspace{
@@ -103,7 +104,7 @@ func (c *K8sClient) buildWorkspace(req models.WorkspaceSettings) *workspacev1alp
 				MemberGroup: req.MemberGroup,
 			},
 			AWS: workspacev1alpha1.AWSSpec{
-				RoleName: fmt.Sprintf("%s-%s", c.Config.AWS.Cluster, req.Name),
+				RoleName: fmt.Sprintf("%s-%s", c.AWS.Cluster, req.Name),
 				EFS: workspacev1alpha1.EFSSpec{
 					AccessPoints: efsAccessPoints,
 				},
@@ -120,10 +121,10 @@ func (c *K8sClient) buildWorkspace(req models.WorkspaceSettings) *workspacev1alp
 }
 
 // CreateWorkspace creates a new Workspace in the cluster
-func (c *K8sClient) CreateWorkspace(ctx context.Context, req models.WorkspaceSettings) error {
-	workspace := c.buildWorkspace(req)
+func CreateWorkspace(ctx context.Context, k8sClient client.Client, req models.WorkspaceSettings, c *utils.Config) error {
+	workspace := buildWorkspace(req, c)
 
-	err := c.client.Create(ctx, workspace)
+	err := k8sClient.Create(ctx, workspace)
 	if err != nil {
 		return fmt.Errorf("failed to create workspace %s: %w", req.Name, err)
 	}
@@ -133,23 +134,23 @@ func (c *K8sClient) CreateWorkspace(ctx context.Context, req models.WorkspaceSet
 }
 
 // UpdateWorkspace updates an existing Workspace in the cluster
-func (c *K8sClient) UpdateWorkspace(ctx context.Context, req models.WorkspaceSettings) error {
+func UpdateWorkspace(ctx context.Context, k8sClient client.Client, req models.WorkspaceSettings, c *utils.Config) error {
 
 	// Retrieve the existing Workspace from the cluster
 	existingWorkspace := &workspacev1alpha1.Workspace{}
-	err := c.client.Get(ctx, client.ObjectKey{Name: req.Name, Namespace: "workspaces"}, existingWorkspace)
+	err := k8sClient.Get(ctx, client.ObjectKey{Name: req.Name, Namespace: "workspaces"}, existingWorkspace)
 	if err != nil {
-		return fmt.Errorf("failed to fetch existing workspace %s: %w", req.Name, err)
+		return fmt.Errorf("failed to fetch workspace %s: %w", req.Name, err)
 	}
 
 	// Build the updated Workspace
-	updatedWorkspace := c.buildWorkspace(req)
+	updatedWorkspace := buildWorkspace(req, c)
 
 	// Set the ResourceVersion to ensure the update is successful
 	updatedWorkspace.ObjectMeta.ResourceVersion = existingWorkspace.ObjectMeta.ResourceVersion
 
 	// Perform the update operation
-	err = c.client.Update(ctx, updatedWorkspace)
+	err = k8sClient.Update(ctx, updatedWorkspace)
 	if err != nil {
 		return fmt.Errorf("failed to update workspace %s: %w", req.Name, err)
 	}
@@ -159,7 +160,7 @@ func (c *K8sClient) UpdateWorkspace(ctx context.Context, req models.WorkspaceSet
 }
 
 // DeleteWorkspace deletes an existing Workspace in the cluster
-func (c *K8sClient) DeleteWorkspace(ctx context.Context, payload models.WorkspaceSettings) error {
+func DeleteWorkspace(ctx context.Context, k8sClient client.Client, payload models.WorkspaceSettings) error {
 
 	// Define the workspace to delete
 	workspace := &workspacev1alpha1.Workspace{
@@ -170,12 +171,11 @@ func (c *K8sClient) DeleteWorkspace(ctx context.Context, payload models.Workspac
 	}
 
 	// Attempt to delete the workspace
-	err := c.client.Delete(ctx, workspace)
+	err := k8sClient.Delete(ctx, workspace)
 	if err != nil {
 		return fmt.Errorf("failed to delete workspace %s: %w", payload.Name, err)
 	}
 
 	log.Info().Str("name", payload.Name).Msg("Workspace successfully deleted")
 	return nil
-
 }
