@@ -1,4 +1,4 @@
-package main
+package cmd
 
 import (
 	"context"
@@ -31,7 +31,7 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&configFile, "config", "config.yaml", "Path to configuration file")
 }
 
-func main() {
+func Execute() {
 	// Execute the root command
 	if err := rootCmd.Execute(); err != nil {
 		log.Fatal().Err(err).Msg("Failed to execute command")
@@ -56,7 +56,7 @@ func runWorkspaceManager(cmd *cobra.Command, args []string) {
 
 	// Producer for workspace-status topic
 	statusProducer, err := pulsarClient.CreateProducer(pulsar.ProducerOptions{
-		Topic:                appConfig.Pulsar.TopicProducer,
+		Topic: appConfig.Pulsar.TopicProducer,
 	})
 	if err != nil {
 		log.Fatal().Err(err).Msg("Failed to create Pulsar producer for workspace-status")
@@ -65,9 +65,9 @@ func runWorkspaceManager(cmd *cobra.Command, args []string) {
 
 	// Consumer for workspace-settings topic
 	settingsConsumer, err := pulsarClient.Subscribe(pulsar.ConsumerOptions{
-		Topic:                appConfig.Pulsar.TopicConsumer,
-		SubscriptionName:     appConfig.Pulsar.Subscription,
-		Type:                 pulsar.Shared,
+		Topic:            appConfig.Pulsar.TopicConsumer,
+		SubscriptionName: appConfig.Pulsar.Subscription,
+		Type:             pulsar.Shared,
 	})
 	if err != nil {
 		log.Fatal().Err(err).Msg("Failed to create Pulsar consumer for workspace-settings")
