@@ -48,7 +48,7 @@ func runWorkspaceManager(cmd *cobra.Command, args []string) {
 	log.Info().Msg("Workspace Manager starting...")
 
 	// Initialize Pulsar client
-	pulsarClient, err := pulsar.NewClient(pulsar.ClientOptions{URL: appConfig.Pulsar.URL})
+	pulsarClient, err := pulsar.NewClient(pulsar.ClientOptions{URL: appConfig.Pulsar.URL, MaxConnectionsPerBroker: 1})
 	if err != nil {
 		log.Fatal().Err(err).Msg("Failed to create Pulsar Client")
 	}
@@ -56,7 +56,7 @@ func runWorkspaceManager(cmd *cobra.Command, args []string) {
 
 	// Producer for workspace-status topic
 	statusProducer, err := pulsarClient.CreateProducer(pulsar.ProducerOptions{
-		Topic: appConfig.Pulsar.TopicProducer,
+		Topic:                appConfig.Pulsar.TopicProducer,
 	})
 	if err != nil {
 		log.Fatal().Err(err).Msg("Failed to create Pulsar producer for workspace-status")
@@ -65,18 +65,14 @@ func runWorkspaceManager(cmd *cobra.Command, args []string) {
 
 	// Consumer for workspace-settings topic
 	settingsConsumer, err := pulsarClient.Subscribe(pulsar.ConsumerOptions{
-		Topic:            appConfig.Pulsar.TopicConsumer,
-		SubscriptionName: appConfig.Pulsar.Subscription,
-		Type:             pulsar.Shared,
+		Topic:                appConfig.Pulsar.TopicConsumer,
+		SubscriptionName:     appConfig.Pulsar.Subscription,
+		Type:                 pulsar.Shared,
 	})
 	if err != nil {
 		log.Fatal().Err(err).Msg("Failed to create Pulsar consumer for workspace-settings")
 	}
 	defer settingsConsumer.Close()
-
-	// Initialize the channels
-	chanWorkspaceStatus := make(chan models.WorkspaceStatus, 100)
-	chanWorkspaceSettings := make(chan models.WorkspaceSettings, 100)
 
 	// Initialize Kubernetes manager
 	k8sMgr, err := k8s.InitializeManager()
@@ -92,19 +88,18 @@ func runWorkspaceManager(cmd *cobra.Command, args []string) {
 	}()
 
 	// Listen for updates to workspace CR status and send updates to workspace-status topic
-	go func() {
-		if err := k8s.ListenForWorkspaceStatusUpdates(context.Background(), k8sMgr, chanWorkspaceStatus); err != nil {
-			log.Fatal().Err(err).Msg("Failed to start informer")
-		}
-	}()
+	chanWorkspaceStatus := make(chan models.WorkspaceStatus, 100)
+	if err := k8s.ListenForWorkspaceStatusUpdates(context.Background(), k8sMgr, chanWorkspaceStatus); err != nil {
+		log.Fatal().Err(err).Msg("Failed to start informer")
+	}
 
-	// Start the consumer loop to process workspace-settings messages
+	//Start the consumer loop to process workspace-settings messages
 	go func() {
 		for {
 			msg, err := settingsConsumer.Receive(context.Background())
 			if err != nil {
-				// No message - carry on
-				continue
+				log.Error().Err(err).Msg("Error receiving message from Pulsar")
+				panic(err)
 			}
 
 			// Parse the message into WorkspaceSettings
@@ -115,26 +110,15 @@ func runWorkspaceManager(cmd *cobra.Command, args []string) {
 				continue
 			}
 
-			// Send the payload to the workspaceSettings channel
-			select {
-			case chanWorkspaceSettings <- payload:
-				settingsConsumer.Ack(msg)
-			default:
-				log.Warn().Msg("Workspace settings channel is full; dropping message")
-				settingsConsumer.Nack(msg)
-			}
-		}
-	}()
-
-	// Process workspace settings from the channel
-	go func() {
-		for payload := range chanWorkspaceSettings {
-			// Process the message with k8sMgr.GetClient()
+			// Process the workspace settings message
 			if err := k8s.ProcessWorkspace(context.Background(), k8sMgr.GetClient(), appConfig, payload); err != nil {
-				log.Error().Err(err).Msgf("Failed to process workspace action: %s", payload.Status)
+				log.Error().Err(err).Msg("Failed to process workspace settings message")
+				settingsConsumer.Nack(msg)
 			} else {
-				log.Info().Msgf("Successfully processed workspace action: %s", payload.Status)
+				settingsConsumer.Ack(msg)
+				log.Info().Msg("Message successfully processed and acknowledged")
 			}
+
 		}
 	}()
 
