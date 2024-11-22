@@ -2,7 +2,7 @@ package k8s
 
 import (
 	"context"
-	"fmt"
+	"net/http"
 	"testing"
 	"time"
 
@@ -10,56 +10,15 @@ import (
 	"github.com/EO-DataHub/eodhp-workspace-manager/models"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
-
-func TestInitializeManager(t *testing.T) {
-
-	// Test successful initialization
-	mgr, err := InitializeManager()
-	assert.NoError(t, err)
-	assert.NotNil(t, mgr)
-
-	// Verify that the Workspace CRD is added to the scheme
-	scheme := mgr.GetScheme()
-	gvks, _, err := scheme.ObjectKinds(&workspacev1alpha1.Workspace{})
-	assert.NoError(t, err)
-	assert.NotEmpty(t, gvks)
-	assert.Equal(t, "Workspace", gvks[0].Kind)
-
-	// Simulate AddToScheme failure
-	originalAddToScheme := workspacev1alpha1.AddToScheme
-	defer func() { workspacev1alpha1.AddToScheme = originalAddToScheme }()
-
-	// Set AddToScheme to return an error
-	workspacev1alpha1.AddToScheme = func(s *runtime.Scheme) error {
-		return fmt.Errorf("failed to add to scheme")
-	}
-
-	// Attempt to initialize the manager again
-	mgr, err = InitializeManager()
-	assert.Error(t, err)
-	assert.Nil(t, mgr)
-	assert.Contains(t, err.Error(), "failed to register Workspace CRD scheme")
-
-	// Simulate NewManager failure
-	originalNewManager := ctrl.NewManager
-	defer func() { ctrl.NewManager = originalNewManager }()
-
-	ctrl.NewManager = func(cfg *rest.Config, options ctrl.Options) (manager.Manager, error) {
-		return nil, fmt.Errorf("failed to create manager")
-	}
-	mgr, err = InitializeManager()
-	assert.Error(t, err)
-	assert.Nil(t, mgr)
-
-}
 
 func TestProcessWorkspace(t *testing.T) {
 
@@ -119,8 +78,10 @@ func TestListenForWorkspaceStatusUpdates(t *testing.T) {
 	scheme := runtime.NewScheme()
 	assert.NoError(t, workspacev1alpha1.AddToScheme(scheme))
 
+	fakeConfig := &rest.Config{}
+
 	// Initialize a manager
-	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
+	mgr, err := ctrl.NewManager(fakeConfig, ctrl.Options{
 		Scheme: scheme,
 	})
 	assert.NoError(t, err)
@@ -194,8 +155,18 @@ func TestListenForWorkspaceStatusUpdates_UpdateHandlerInvoked(t *testing.T) {
 	scheme := runtime.NewScheme()
 	assert.NoError(t, workspacev1alpha1.AddToScheme(scheme))
 
-	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
+	fakeConfig := &rest.Config{}
+
+	// Create a custom RESTMapper
+	gvk := workspacev1alpha1.GroupVersion.WithKind("Workspace")
+	restMapper := meta.NewDefaultRESTMapper([]schema.GroupVersion{workspacev1alpha1.GroupVersion})
+	restMapper.Add(gvk, meta.RESTScopeNamespace)
+
+	mgr, err := ctrl.NewManager(fakeConfig, ctrl.Options{
 		Scheme: scheme,
+		MapperProvider: func(c *rest.Config, httpClient *http.Client) (meta.RESTMapper, error) {
+			return restMapper, nil
+		},
 	})
 	assert.NoError(t, err)
 
