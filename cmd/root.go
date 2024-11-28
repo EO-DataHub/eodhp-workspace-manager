@@ -93,7 +93,29 @@ func runWorkspaceManager(cmd *cobra.Command, args []string) {
 		log.Fatal().Err(err).Msg("Failed to start informer")
 	}
 
-	//Start the consumer loop to process workspace-settings messages
+	// Start the producer loop to process workspace-status messages
+	go func() {
+		for statusUpdate := range chanWorkspaceStatus {
+			// Serialize the status update to JSON
+			payload, err := json.Marshal(statusUpdate)
+			if err != nil {
+				log.Error().Err(err).Msg("Failed to serialize status update")
+				continue
+			}
+
+			// Publish the message to Pulsar
+			_, err = statusProducer.Send(context.Background(), &pulsar.ProducerMessage{
+				Payload: payload,
+			})
+			if err != nil {
+				log.Error().Err(err).Msg("Failed to publish status update to Pulsar")
+			} else {
+				log.Info().Msgf("Published status update to Pulsar: %v", statusUpdate)
+			}
+		}
+	}()
+
+	// Start the consumer loop to process workspace-settings messages
 	go func() {
 		for {
 			msg, err := settingsConsumer.Receive(context.Background())
