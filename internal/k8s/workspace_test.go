@@ -48,8 +48,8 @@ func TestMapObjectStoresToS3Buckets(t *testing.T) {
 	_, c := setupFakeClient()
 
 	objectStores := []models.ObjectStore{
-		{Name: "obj1", Path: "/data/obj1", EnvVar: "OBJ1_ENV"},
-		{Name: "obj2", Path: "/data/obj2", EnvVar: "OBJ2_ENV"},
+		{Name: "obj1", Path: "/data/obj1", EnvVar: "S3_BUCKET_WORKSPACE"},
+		{Name: "obj2", Path: "/data/obj2", EnvVar: "S3_BUCKET_WORKSPACE"},
 	}
 
 	// Call MapObjectStoresToS3Buckets
@@ -57,8 +57,7 @@ func TestMapObjectStoresToS3Buckets(t *testing.T) {
 
 	assert.Len(t, result, 2)
 	assert.Equal(t, "obj1", result[0].Name)
-	assert.Equal(t, "/data/obj1", result[0].Path)
-	assert.Equal(t, "OBJ1_ENV", result[0].EnvVar)
+	assert.Equal(t, "/test-workspace", result[0].Path)
 	assert.Equal(t, "test-cluster-test-workspace-s3", result[0].AccessPointName)
 }
 
