@@ -1,6 +1,10 @@
 package models
 
-import "github.com/google/uuid"
+import (
+	"time"
+
+	"github.com/google/uuid"
+)
 
 // WorkspaceSettings represents the configuration of a workspace.
 type WorkspaceSettings struct {
@@ -10,6 +14,7 @@ type WorkspaceSettings struct {
 	MemberGroup string    `json:"member_group"`
 	Status      string    `json:"status"`
 	Stores      *[]Stores `json:"stores"`
+	LastUpdated time.Time `json:"last_updated"`
 }
 
 // Stores holds lists of object and block stores associated with a workspace.

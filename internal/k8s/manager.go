@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"time"
 
 	workspacev1alpha1 "github.com/EO-DataHub/eodhp-workspace-controller/api/v1alpha1"
 	"github.com/EO-DataHub/eodhp-workspace-manager/internal/utils"
@@ -96,9 +97,10 @@ func handleUpdate(oldObj, newObj interface{}, statusUpdates chan models.Workspac
 
 	// Create a WorkspaceStatus object to send to the channel
 	statusUpdate := models.WorkspaceStatus{
-		Name:      newWorkspace.Name,
-		Namespace: newWorkspace.Status.Namespace,
-		AWS:       newWorkspace.Status.AWS,
+		Name:        newWorkspace.Name,
+		Namespace:   newWorkspace.Status.Namespace,
+		AWS:         newWorkspace.Status.AWS,
+		LastUpdated: time.Now().UTC(),
 	}
 
 	// Send the status update to the channel

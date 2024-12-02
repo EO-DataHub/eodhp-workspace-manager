@@ -18,8 +18,8 @@ func MapObjectStoresToS3Buckets(workspaceName string, c *utils.Config, objectSto
 	for _, obj := range objectStores {
 		buckets = append(buckets, workspacev1alpha1.S3Bucket{
 			Name:            obj.Name,
-			Path:            obj.Path,
-			EnvVar:          obj.EnvVar,
+			Path:            "/" + workspaceName,
+			EnvVar:          "S3_BUCKET_WORKSPACE",
 			AccessPointName: fmt.Sprintf("%s-%s-s3", c.AWS.Cluster, workspaceName),
 		})
 	}
@@ -96,6 +96,9 @@ func buildWorkspace(req models.WorkspaceSettings, c *utils.Config) *workspacev1a
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      req.Name,
 			Namespace: "workspaces",
+			Labels: map[string]string{
+				"app.kubernetes.io/name": "workspace-operator",
+			},
 		},
 		Spec: workspacev1alpha1.WorkspaceSpec{
 			Namespace: "ws-" + req.Name,
