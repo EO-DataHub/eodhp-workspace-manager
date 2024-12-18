@@ -26,7 +26,7 @@ type StorageConfig struct {
 	Size         string `yaml:"size"`
 	StorageClass string `yaml:"storageClass"`
 	PVCName      string `yaml:"pvcName"`
-	Driver       string `yaml:"efs.csi.aws.com"`
+	Driver       string `yaml:"driver"`
 }
 
 // Config holds the application's configuration

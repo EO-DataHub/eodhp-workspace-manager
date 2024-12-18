@@ -39,7 +39,7 @@ func MapBlockStoresToEFSAccessPoints(workspaceName string, c *utils.Config, bloc
 				UID: 1000, // Default UID
 				GID: 1000, // Default GID
 			},
-			Permissions: "0755", // Default permissions
+			Permissions: "755", // Default permissions
 		})
 	}
 	return accessPoints
