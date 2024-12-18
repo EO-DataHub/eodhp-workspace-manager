@@ -18,7 +18,7 @@ func MapObjectStoresToS3Buckets(workspaceName string, c *utils.Config, objectSto
 	for _, obj := range objectStores {
 		buckets = append(buckets, workspacev1alpha1.S3Bucket{
 			Name:            obj.Name,
-			Path:            "/" + workspaceName,
+			Path:            workspaceName + "/",
 			EnvVar:          "S3_BUCKET_WORKSPACE",
 			AccessPointName: fmt.Sprintf("%s-%s-s3", c.AWS.Cluster, workspaceName),
 		})
