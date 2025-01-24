@@ -100,6 +100,7 @@ func handleUpdate(oldObj, newObj interface{}, statusUpdates chan models.Workspac
 		Name:        newWorkspace.Name,
 		Namespace:   newWorkspace.Status.Namespace,
 		AWS:         newWorkspace.Status.AWS,
+		State:       newWorkspace.Status.State,
 		LastUpdated: time.Now().UTC(),
 	}
 

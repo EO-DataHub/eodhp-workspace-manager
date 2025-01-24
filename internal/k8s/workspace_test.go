@@ -30,6 +30,7 @@ func setupFakeClient() (client.Client, *utils.Config) {
 		AWS: utils.AWSConfig{
 			Cluster: "test-cluster",
 			FSID:    "fs-test",
+			Bucket:  "test-bucket",
 		},
 		Storage: utils.StorageConfig{
 			Size:         "10Gi",
@@ -46,18 +47,17 @@ func TestMapObjectStoresToS3Buckets(t *testing.T) {
 
 	// Setup test client and fake client builder
 	_, c := setupFakeClient()
-
 	objectStores := []models.ObjectStore{
-		{Name: "obj1", Path: "/data/obj1", EnvVar: "S3_BUCKET_WORKSPACE"},
-		{Name: "obj2", Path: "/data/obj2", EnvVar: "S3_BUCKET_WORKSPACE"},
+		{Name: "obj1"},
+		{Name: "obj2"},
 	}
 
 	// Call MapObjectStoresToS3Buckets
 	result := MapObjectStoresToS3Buckets("test-workspace", c, objectStores)
 
 	assert.Len(t, result, 2)
-	assert.Equal(t, "obj1", result[0].Name)
-	assert.Equal(t, "/test-workspace", result[0].Path)
+	assert.Equal(t, c.AWS.Bucket, result[0].Name)
+	assert.Equal(t, "obj1/", result[0].Path)
 	assert.Equal(t, "test-cluster-test-workspace-s3", result[0].AccessPointName)
 }
 
@@ -78,7 +78,7 @@ func TestMapBlockStoresToEFSAccessPoints(t *testing.T) {
 	assert.Equal(t, "block1", result[0].Name)
 	assert.Equal(t, "fs-test", result[0].FSID)
 	assert.Equal(t, "/workspaces/test-workspace", result[0].RootDirectory)
-	assert.Equal(t, "0755", result[0].Permissions)
+	assert.Equal(t, "755", result[0].Permissions)
 	assert.Equal(t, int64(1000), result[0].User.UID)
 }
 
@@ -103,9 +103,8 @@ func TestCreateWorkspace(t *testing.T) {
 	client, c := setupFakeClient()
 
 	workspaceSettings := models.WorkspaceSettings{
-		Name:        "test-workspace",
-		Account:     uuid.New(),
-		MemberGroup: "test-group",
+		Name:    "test-workspace",
+		Account: uuid.New(),
 	}
 
 	// Call CreateWorkspace
@@ -209,16 +208,14 @@ func TestBuildWorkspace(t *testing.T) {
 	workspaceSettings := models.WorkspaceSettings{
 		Name:        "test-workspace",
 		Account:     uuid.New(),
-		MemberGroup: "test-group",
+		MemberGroup: "test-workspace",
 		Stores: &[]models.Stores{
 			{
 				Object: []models.ObjectStore{
-					{Name: "s3-bucket1", Path: "/data/bucket1", EnvVar: "S3_BUCKET1"},
-					{Name: "s3-bucket2", Path: "/data/bucket2", EnvVar: "S3_BUCKET2"},
+					{Name: "test-workspace-object-store"},
 				},
 				Block: []models.BlockStore{
-					{Name: "efs-volume1"},
-					{Name: "efs-volume2"},
+					{Name: "test-workspace-block-store"},
 				},
 			},
 		},
@@ -230,10 +227,10 @@ func TestBuildWorkspace(t *testing.T) {
 	// Validate the generated Workspace object
 	assert.Equal(t, "test-workspace", result.Name)
 	assert.Equal(t, "ws-test-workspace", result.Spec.Namespace)
-	assert.Len(t, result.Spec.AWS.S3.Buckets, 2)
-	assert.Equal(t, "s3-bucket1", result.Spec.AWS.S3.Buckets[0].Name)
-	assert.Len(t, result.Spec.AWS.EFS.AccessPoints, 2)
-	assert.Equal(t, "efs-volume1", result.Spec.AWS.EFS.AccessPoints[0].Name)
+	assert.Len(t, result.Spec.AWS.S3.Buckets, 1)
+	assert.Equal(t, c.AWS.Bucket, result.Spec.AWS.S3.Buckets[0].Name)
+	assert.Len(t, result.Spec.AWS.EFS.AccessPoints, 1)
+	assert.Equal(t, "test-workspace-block-store", result.Spec.AWS.EFS.AccessPoints[0].Name)
 	assert.Len(t, result.Spec.Storage.PersistentVolumes, 1)
-	assert.Equal(t, "pv-test-workspace-workspace", result.Spec.Storage.PersistentVolumes[0].Name)
+	assert.Equal(t, "pv-test-workspace-block-store", result.Spec.Storage.PersistentVolumes[0].Name)
 }

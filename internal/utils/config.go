@@ -20,6 +20,7 @@ type PulsarConfig struct {
 type AWSConfig struct {
 	Cluster string `yaml:"cluster"`
 	FSID    string `yaml:"fsId"`
+	Bucket  string `yaml:"bucket"`
 }
 
 type StorageConfig struct {
