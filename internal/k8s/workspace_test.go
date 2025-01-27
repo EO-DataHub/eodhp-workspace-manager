@@ -2,6 +2,7 @@ package k8s
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	workspacev1alpha1 "github.com/EO-DataHub/eodhp-workspace-controller/api/v1alpha1"
@@ -83,18 +84,50 @@ func TestMapBlockStoresToEFSAccessPoints(t *testing.T) {
 }
 
 func TestGenerateStorageConfig(t *testing.T) {
+	// Define a mock configuration
+	mockConfig := &utils.Config{
+		Storage: utils.StorageConfig{
+			StorageClass: "test-storage-class",
+			Size:         "10Gi",
+			Driver:       "efs.csi.aws.com",
+			PVCName:      "test-pvc-name",
+		},
+	}
 
-	// Setup test client and fake client builder
-	_, c := setupFakeClient()
+	// Define mock EFS access points
+	mockEFSAccessPoints := []workspacev1alpha1.EFSAccess{
+		{
+			Name: "block-store-1",
+		},
+		{
+			Name: "block-store-2",
+		},
+	}
 
-	// Call GenerateStorageConfig
-	result := GenerateStorageConfig("test-workspace", c)
+	// Call GenerateStorageConfig with a test workspace name
+	result := GenerateStorageConfig("test-workspace", mockConfig, mockEFSAccessPoints)
 
-	assert.Len(t, result.PersistentVolumes, 1)
-	assert.Equal(t, "pv-test-workspace-workspace", result.PersistentVolumes[0].Name)
-	assert.Equal(t, "test-storage", result.PersistentVolumes[0].StorageClass)
-	assert.Equal(t, "10Gi", result.PersistentVolumes[0].Size)
-	assert.Equal(t, "efs.csi.aws.com", result.PersistentVolumes[0].VolumeSource.Driver)
+	// Validate the number of generated Persistent Volumes and Claims
+	assert.Len(t, result.PersistentVolumes, len(mockEFSAccessPoints))
+	assert.Len(t, result.PersistentVolumeClaims, len(mockEFSAccessPoints))
+
+	// Validate details of the Persistent Volumes
+	for i, pv := range result.PersistentVolumes {
+		assert.Equal(t, fmt.Sprintf("pv-%s", mockEFSAccessPoints[i].Name), pv.Name)
+		assert.Equal(t, mockConfig.Storage.StorageClass, pv.StorageClass)
+		assert.Equal(t, mockConfig.Storage.Size, pv.Size)
+		assert.NotNil(t, pv.VolumeSource)
+		assert.Equal(t, mockConfig.Storage.Driver, pv.VolumeSource.Driver)
+		assert.Equal(t, mockEFSAccessPoints[i].Name, pv.VolumeSource.AccessPointName)
+	}
+
+	// Validate details of the Persistent Volume Claims
+	for i, pvc := range result.PersistentVolumeClaims {
+		assert.Equal(t, "test-pvc-name", pvc.PVSpec.Name)
+		assert.Equal(t, mockConfig.Storage.StorageClass, pvc.PVSpec.StorageClass)
+		assert.Equal(t, mockConfig.Storage.Size, pvc.PVSpec.Size)
+		assert.Equal(t, fmt.Sprintf("pv-%s", mockEFSAccessPoints[i].Name), pvc.PVName)
+	}
 }
 
 func TestCreateWorkspace(t *testing.T) {

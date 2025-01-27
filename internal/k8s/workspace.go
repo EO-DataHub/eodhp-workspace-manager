@@ -46,31 +46,40 @@ func MapBlockStoresToEFSAccessPoints(workspaceName string, c *utils.Config, bloc
 }
 
 // GenerateStorageConfig generates a StorageSpec for a Workspace based on the workspace name
-func GenerateStorageConfig(workspaceName string, c *utils.Config) workspacev1alpha1.StorageSpec {
-	pvName := fmt.Sprintf("pv-%s-workspace", workspaceName)
+func GenerateStorageConfig(workspaceName string, c *utils.Config, efsAccessPoints []workspacev1alpha1.EFSAccess) workspacev1alpha1.StorageSpec {
+	var pvs []workspacev1alpha1.PVSpec
+	var pvcs []workspacev1alpha1.PVCSpec
 
-	return workspacev1alpha1.StorageSpec{
-		PersistentVolumes: []workspacev1alpha1.PVSpec{
-			{
-				Name:         pvName,
+	for _, blockStore := range efsAccessPoints {
+
+		// Generate a unique name for the Persistent Volume - <workspace-name>-<block-store-name>
+		pvName := fmt.Sprintf("pv-%s", blockStore.Name)
+
+		// Persistent Volume Specification
+		pvs = append(pvs, workspacev1alpha1.PVSpec{
+			Name:         pvName,
+			StorageClass: c.Storage.StorageClass,
+			Size:         c.Storage.Size,
+			VolumeSource: &workspacev1alpha1.VolumeSource{
+				Driver:          c.Storage.Driver,
+				AccessPointName: blockStore.Name,
+			},
+		})
+
+		// Persistent Volume Claim Specification
+		pvcs = append(pvcs, workspacev1alpha1.PVCSpec{
+			PVSpec: workspacev1alpha1.PVSpec{
+				Name:         c.Storage.PVCName,
 				StorageClass: c.Storage.StorageClass,
 				Size:         c.Storage.Size,
-				VolumeSource: &workspacev1alpha1.VolumeSource{
-					Driver:          c.Storage.Driver,
-					AccessPointName: fmt.Sprintf("%s-%s-pv", c.AWS.Cluster, workspaceName),
-				},
 			},
-		},
-		PersistentVolumeClaims: []workspacev1alpha1.PVCSpec{
-			{
-				PVSpec: workspacev1alpha1.PVSpec{
-					Name:         c.Storage.PVCName,
-					StorageClass: c.Storage.StorageClass,
-					Size:         c.Storage.Size,
-				},
-				PVName: pvName,
-			},
-		},
+			PVName: pvName,
+		})
+	}
+
+	return workspacev1alpha1.StorageSpec{
+		PersistentVolumes:      pvs,
+		PersistentVolumeClaims: pvcs,
 	}
 }
 
@@ -89,7 +98,7 @@ func buildWorkspace(req models.WorkspaceSettings, c *utils.Config) *workspacev1a
 	}
 
 	// Generate storage configuration based on workspace name
-	storageConfig := GenerateStorageConfig(req.Name, c)
+	storageConfig := GenerateStorageConfig(req.Name, c, efsAccessPoints)
 
 	// Create the Workspace object
 	return &workspacev1alpha1.Workspace{
