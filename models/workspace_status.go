@@ -12,4 +12,5 @@ type WorkspaceStatus struct {
 	Namespace   string                      `json:"namespace"`
 	AWS         workspacev1alpha1.AWSStatus `json:"status"`
 	LastUpdated time.Time                   `json:"last_updated"`
+	State       string                      `json:"state"`
 }
