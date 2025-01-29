@@ -37,5 +37,5 @@ type BlockStore struct {
 	StoreID       uuid.UUID `json:"store_id"`
 	Name          string    `json:"name"`
 	AccessPointID string    `json:"access_point_id"`
-	FSID          string    `json:"fs_id"`
+	MountPoint    string    `json:"mount_point"`
 }

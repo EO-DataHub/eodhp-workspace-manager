@@ -34,7 +34,7 @@ func MapBlockStoresToEFSAccessPoints(workspaceName string, c *utils.Config, bloc
 		accessPoints = append(accessPoints, workspacev1alpha1.EFSAccess{
 			Name:          block.Name,
 			FSID:          c.AWS.FSID,
-			RootDirectory: "/workspaces/" + workspaceName,
+			RootDirectory: fmt.Sprintf("/workspaces/%s/%s", workspaceName, block.Name),
 			User: workspacev1alpha1.User{
 				UID: 1000, // Default UID
 				GID: 1000, // Default GID
@@ -53,7 +53,8 @@ func GenerateStorageConfig(workspaceName string, c *utils.Config, efsAccessPoint
 	for _, blockStore := range efsAccessPoints {
 
 		// Generate a unique name for the Persistent Volume - <workspace-name>-<block-store-name>
-		pvName := fmt.Sprintf("pv-%s", blockStore.Name)
+		pvName := fmt.Sprintf("pv-%s-%s", workspaceName, blockStore.Name)
+		pvcName := fmt.Sprintf("pvc-%s-%s", workspaceName, blockStore.Name)
 
 		// Persistent Volume Specification
 		pvs = append(pvs, workspacev1alpha1.PVSpec{
@@ -69,7 +70,7 @@ func GenerateStorageConfig(workspaceName string, c *utils.Config, efsAccessPoint
 		// Persistent Volume Claim Specification
 		pvcs = append(pvcs, workspacev1alpha1.PVCSpec{
 			PVSpec: workspacev1alpha1.PVSpec{
-				Name:         c.Storage.PVCName,
+				Name:         pvcName,
 				StorageClass: c.Storage.StorageClass,
 				Size:         c.Storage.Size,
 			},
@@ -111,10 +112,6 @@ func buildWorkspace(req models.WorkspaceSettings, c *utils.Config) *workspacev1a
 		},
 		Spec: workspacev1alpha1.WorkspaceSpec{
 			Namespace: "ws-" + req.Name,
-			Account:   req.Account.String(),
-			Authorization: workspacev1alpha1.AuthorizationSpec{
-				MemberGroup: req.MemberGroup,
-			},
 			AWS: workspacev1alpha1.AWSSpec{
 				RoleName: fmt.Sprintf("%s-%s", c.AWS.Cluster, req.Name),
 				EFS: workspacev1alpha1.EFSSpec{

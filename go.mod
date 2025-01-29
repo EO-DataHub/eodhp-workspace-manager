@@ -5,7 +5,7 @@ go 1.23.0
 toolchain go1.23.5
 
 require (
-	github.com/EO-DataHub/eodhp-workspace-controller v0.0.0-20250124142231-cf9563252e17
+	github.com/EO-DataHub/eodhp-workspace-controller v0.0.0-20250129132555-9e8ac85ef5dd
 	github.com/apache/pulsar-client-go v0.14.0
 	github.com/google/uuid v1.6.0
 	github.com/rs/zerolog v1.33.0
