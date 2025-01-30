@@ -27,10 +27,11 @@ type Stores struct {
 type ObjectStore struct {
 	StoreID        uuid.UUID `json:"store_id"`
 	Name           string    `json:"name"`
-	Path           string    `json:"path"`
+	Bucket         string    `json:"bucket"`
+	Prefix         string    `json:"prefix"`
+	Host           string    `json:"host"`
 	EnvVar         string    `json:"env_var"`
 	AccessPointArn string    `json:"access_point_arn"`
-	Host           string    `json:"host"`
 }
 
 // BlockStore represents a block storage entry with related metadata.
