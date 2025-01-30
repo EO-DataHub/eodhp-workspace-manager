@@ -30,6 +30,7 @@ type ObjectStore struct {
 	Path           string    `json:"path"`
 	EnvVar         string    `json:"env_var"`
 	AccessPointArn string    `json:"access_point_arn"`
+	Host           string    `json:"host"`
 }
 
 // BlockStore represents a block storage entry with related metadata.
