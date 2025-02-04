@@ -1,5 +1,15 @@
 # Workspace Manager
 
+## v0.1.3 (04-02-2025)
+
+- PV/PVC names based on the `<workspace-name>-<block-store-name>` template
+- EFS Root directory now set to `/workspaces/<workspace-name>/<block-store-name>`
+- Revised user response details - i.e. added MountPoint, removed FSID (not needed) etc..
+
+## v0.1.2 (30-01-2025)
+
+- Added `Host`, `Prefix` and `Bucket` to the workspace settings struct for object stores
+
 ## v0.1.1 (27-01-2025)
 
 - Added `state` to the `WorkspaceStatus` struct
