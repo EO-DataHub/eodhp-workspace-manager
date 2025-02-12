@@ -34,7 +34,7 @@ func MapBlockStoresToEFSAccessPoints(workspaceName string, c *utils.Config, bloc
 		accessPoints = append(accessPoints, workspacev1alpha1.EFSAccess{
 			Name:          block.Name,
 			FSID:          c.AWS.FSID,
-			RootDirectory: fmt.Sprintf("/workspaces/%s/%s", workspaceName, block.Name),
+			RootDirectory: fmt.Sprintf("/workspaces/%s", block.Name),
 			User: workspacev1alpha1.User{
 				UID: 1000, // Default UID
 				GID: 1000, // Default GID
@@ -53,8 +53,8 @@ func GenerateStorageConfig(workspaceName string, c *utils.Config, efsAccessPoint
 	for _, blockStore := range efsAccessPoints {
 
 		// Generate a unique name for the Persistent Volume - <workspace-name>-<block-store-name>
-		pvName := fmt.Sprintf("pv-%s-%s", workspaceName, blockStore.Name)
-		pvcName := fmt.Sprintf("pvc-%s-%s", workspaceName, blockStore.Name)
+		pvName := fmt.Sprintf("pv-%s", blockStore.Name)
+		pvcName := fmt.Sprintf("pvc-%s", blockStore.Name)
 
 		// Persistent Volume Specification
 		pvs = append(pvs, workspacev1alpha1.PVSpec{

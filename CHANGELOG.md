@@ -1,5 +1,10 @@
 # Workspace Manager
 
+## v0.1.4 (12-02-2025)
+
+- PV/PVC names based on the `<workspace-name>` template
+- EFS root directory is `/workspaces/<workspace-name>`
+
 ## v0.1.3 (04-02-2025)
 
 - PV/PVC names based on the `<workspace-name>-<block-store-name>` template
