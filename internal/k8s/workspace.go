@@ -52,9 +52,8 @@ func GenerateStorageConfig(workspaceName string, c *utils.Config, efsAccessPoint
 
 	for _, blockStore := range efsAccessPoints {
 
-		// Generate a unique name for the Persistent Volume - <workspace-name>-<block-store-name>
-		pvName := fmt.Sprintf("pv-%s", blockStore.Name)
-		pvcName := fmt.Sprintf("pvc-%s", blockStore.Name)
+		pvName := fmt.Sprintf("pv-%s", workspaceName)
+		pvcName := fmt.Sprintf("pvc-%s", workspaceName)
 
 		// Persistent Volume Specification
 		pvs = append(pvs, workspacev1alpha1.PVSpec{

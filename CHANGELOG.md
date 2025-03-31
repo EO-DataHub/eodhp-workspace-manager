@@ -1,5 +1,10 @@
 # Workspace Manager
 
+## v0.1.5 (31-03-2025)
+
+- PV/PVC names based on the `<workspace-name>` template - bugfix
+
+
 ## v0.1.4 (12-02-2025)
 
 - PV/PVC names based on the `<workspace-name>` template
