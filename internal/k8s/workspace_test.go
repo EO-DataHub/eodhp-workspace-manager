@@ -68,17 +68,16 @@ func TestMapBlockStoresToEFSAccessPoints(t *testing.T) {
 	_, c := setupFakeClient()
 
 	blockStores := []models.BlockStore{
-		{Name: "block1"},
-		{Name: "block2"},
+		{Name: "my-block-store"},
 	}
 
 	// Call MapBlockStoresToEFSAccessPoints
 	result := MapBlockStoresToEFSAccessPoints("test-workspace", c, blockStores)
 
-	assert.Len(t, result, 2)
-	assert.Equal(t, "block1", result[0].Name)
+	assert.Len(t, result, 1)
+	assert.Equal(t, "my-block-store", result[0].Name)
 	assert.Equal(t, "fs-test", result[0].FSID)
-	assert.Equal(t, "/workspaces/test-workspace", result[0].RootDirectory)
+	assert.Equal(t, "/workspaces/my-block-store", result[0].RootDirectory)
 	assert.Equal(t, "755", result[0].Permissions)
 	assert.Equal(t, int64(1000), result[0].User.UID)
 }
@@ -97,15 +96,14 @@ func TestGenerateStorageConfig(t *testing.T) {
 	// Define mock EFS access points
 	mockEFSAccessPoints := []workspacev1alpha1.EFSAccess{
 		{
-			Name: "block-store-1",
-		},
-		{
-			Name: "block-store-2",
+			Name: "my-block-store",
 		},
 	}
 
+	workspaceName := "test-workspace"
+
 	// Call GenerateStorageConfig with a test workspace name
-	result := GenerateStorageConfig("test-workspace", mockConfig, mockEFSAccessPoints)
+	result := GenerateStorageConfig(workspaceName, mockConfig, mockEFSAccessPoints)
 
 	// Validate the number of generated Persistent Volumes and Claims
 	assert.Len(t, result.PersistentVolumes, len(mockEFSAccessPoints))
@@ -113,7 +111,7 @@ func TestGenerateStorageConfig(t *testing.T) {
 
 	// Validate details of the Persistent Volumes
 	for i, pv := range result.PersistentVolumes {
-		assert.Equal(t, fmt.Sprintf("pv-%s", mockEFSAccessPoints[i].Name), pv.Name)
+		assert.Equal(t, fmt.Sprintf("pv-%s", workspaceName), pv.Name)
 		assert.Equal(t, mockConfig.Storage.StorageClass, pv.StorageClass)
 		assert.Equal(t, mockConfig.Storage.Size, pv.Size)
 		assert.NotNil(t, pv.VolumeSource)
@@ -122,11 +120,11 @@ func TestGenerateStorageConfig(t *testing.T) {
 	}
 
 	// Validate details of the Persistent Volume Claims
-	for i, pvc := range result.PersistentVolumeClaims {
-		assert.Equal(t, "test-pvc-name", pvc.PVSpec.Name)
+	for _, pvc := range result.PersistentVolumeClaims {
+		assert.Equal(t, fmt.Sprintf("pvc-%s", workspaceName), pvc.PVSpec.Name)
 		assert.Equal(t, mockConfig.Storage.StorageClass, pvc.PVSpec.StorageClass)
 		assert.Equal(t, mockConfig.Storage.Size, pvc.PVSpec.Size)
-		assert.Equal(t, fmt.Sprintf("pv-%s", mockEFSAccessPoints[i].Name), pvc.PVName)
+		assert.Equal(t, fmt.Sprintf("pv-%s", workspaceName), pvc.PVName)
 	}
 }
 
