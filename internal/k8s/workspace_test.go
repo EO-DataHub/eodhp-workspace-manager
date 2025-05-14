@@ -245,10 +245,10 @@ func TestBuildWorkspace(t *testing.T) {
 		Stores: &[]models.Stores{
 			{
 				Object: []models.ObjectStore{
-					{Name: "test-workspace-object-store"},
+					{Name: "test-workspace"},
 				},
 				Block: []models.BlockStore{
-					{Name: "test-workspace-block-store"},
+					{Name: "test-workspace"},
 				},
 			},
 		},
@@ -263,7 +263,7 @@ func TestBuildWorkspace(t *testing.T) {
 	assert.Len(t, result.Spec.AWS.S3.Buckets, 1)
 	assert.Equal(t, c.AWS.Bucket, result.Spec.AWS.S3.Buckets[0].Name)
 	assert.Len(t, result.Spec.AWS.EFS.AccessPoints, 1)
-	assert.Equal(t, "test-workspace-block-store", result.Spec.AWS.EFS.AccessPoints[0].Name)
+	assert.Equal(t, "test-workspace", result.Spec.AWS.EFS.AccessPoints[0].Name)
 	assert.Len(t, result.Spec.Storage.PersistentVolumes, 1)
-	assert.Equal(t, "pv-test-workspace-block-store", result.Spec.Storage.PersistentVolumes[0].Name)
+	assert.Equal(t, "pv-test-workspace", result.Spec.Storage.PersistentVolumes[0].Name)
 }
