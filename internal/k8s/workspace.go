@@ -137,7 +137,7 @@ func CreateWorkspace(ctx context.Context, k8sClient client.Client, req models.Wo
 		return fmt.Errorf("failed to create workspace %s: %w", req.Name, err)
 	}
 
-	log.Info().Str("name", req.Name).Str("namespace", req.MemberGroup).Msg("Workspace successfully created")
+	log.Info().Str("name", req.Name).Str("namespace", req.Name).Msg("Workspace successfully created")
 	return nil
 }
 
@@ -163,7 +163,7 @@ func UpdateWorkspace(ctx context.Context, k8sClient client.Client, req models.Wo
 		return fmt.Errorf("failed to update workspace %s: %w", req.Name, err)
 	}
 
-	log.Info().Str("name", req.Name).Str("namespace", req.MemberGroup).Msg("Workspace successfully updated")
+	log.Info().Str("name", req.Name).Str("namespace", req.Name).Msg("Workspace successfully updated")
 	return nil
 }
 

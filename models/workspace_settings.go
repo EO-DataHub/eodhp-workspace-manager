@@ -11,7 +11,7 @@ type WorkspaceSettings struct {
 	ID          uuid.UUID `json:"id"`
 	Name        string    `json:"name"`
 	Account     uuid.UUID `json:"account"`
-	MemberGroup string    `json:"member_group"`
+	Owner       string    `json:"owner"`
 	Status      string    `json:"status"`
 	Stores      *[]Stores `json:"stores"`
 	LastUpdated time.Time `json:"last_updated"`

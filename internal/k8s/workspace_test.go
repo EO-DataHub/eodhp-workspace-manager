@@ -41,8 +41,8 @@ func TestCreateWorkspace(t *testing.T) {
 				Block:  []models.BlockStore{{Name: "data"}},
 			},
 		},
-		Status:      "creating",
-		MemberGroup: "team-a",
+		Status: "creating",
+		Owner:  "owner",
 	}
 
 	err := CreateWorkspace(ctx, fakeClient, payload, cfg)
