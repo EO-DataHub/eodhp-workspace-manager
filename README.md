@@ -1,5 +1,5 @@
 # EO DataHub Workspace Manager
-The Workspace Manager is a serivce that has two distinct roles:
+The Workspace Manager is a service that has two distinct roles:
 
 1. Monitors the Workspace CRD. It detects changes to the `status` and produces a message to send directly to the `workspace-status` pulsar topic
 
