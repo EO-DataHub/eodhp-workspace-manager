@@ -48,7 +48,15 @@ func runWorkspaceManager(cmd *cobra.Command, args []string) {
 	log.Info().Msg("Workspace Manager starting...")
 
 	// Initialize Pulsar client
-	pulsarClient, err := pulsar.NewClient(pulsar.ClientOptions{URL: appConfig.Pulsar.URL, MaxConnectionsPerBroker: 1})
+	pulsarAuth, err := appConfig.Pulsar.Authentication()
+	if err != nil {
+		log.Fatal().Err(err).Msg("Failed to configure Pulsar authentication")
+	}
+	pulsarClient, err := pulsar.NewClient(pulsar.ClientOptions{
+		URL:                     appConfig.Pulsar.URL,
+		MaxConnectionsPerBroker: 1,
+		Authentication:          pulsarAuth,
+	})
 	if err != nil {
 		log.Fatal().Err(err).Msg("Failed to create Pulsar Client")
 	}
@@ -63,9 +71,10 @@ func runWorkspaceManager(cmd *cobra.Command, args []string) {
 	}
 	defer statusProducer.Close()
 
-	// Consumer for workspace-settings topic
+	// Consumer for workspace-settings topic(s)
+	settingsTopics := appConfig.Pulsar.ConsumerTopics()
 	settingsConsumer, err := pulsarClient.Subscribe(pulsar.ConsumerOptions{
-		Topic:            appConfig.Pulsar.TopicConsumer,
+		Topics:           settingsTopics,
 		SubscriptionName: appConfig.Pulsar.Subscription,
 		Type:             pulsar.Shared,
 	})
@@ -73,6 +82,7 @@ func runWorkspaceManager(cmd *cobra.Command, args []string) {
 		log.Fatal().Err(err).Msg("Failed to create Pulsar consumer for workspace-settings")
 	}
 	defer settingsConsumer.Close()
+	log.Info().Strs("topics", settingsTopics).Msg("Subscribed to workspace-settings")
 
 	// Initialize Kubernetes manager
 	k8sMgr, err := k8s.InitializeManager()

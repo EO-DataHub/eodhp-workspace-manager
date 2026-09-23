@@ -24,8 +24,9 @@ On deployment, the `workspace-manager` reads a config file. It is templated as f
 pulsar:
   url: ...
   topicProducer: persistent://public/default/workspace-status
-  topicConsumer: persistent://public/default/workspace-configuration
+  topicConsumer: persistent://public/default/workspace-settings
   subscription: ...
+  tokenFile: "{{ .PULSAR_TOKEN_FILE }}"
 logLevel: INFO
 aws:
   cluster: eodhp-...
@@ -36,6 +37,9 @@ storage:
   pvcName: workspace-pvc
   driver: efs.csi.aws.com
 ```
+
+- `pulsar.topicConsumer` can be a comma-separated list, e.g. `persistent://public/default/workspace-settings,persistent://public/workspaces/workspace-settings`, to read old and new topics with the same subscription while topics move.
+- `pulsar.tokenFile` is the path to a Pulsar JWT. When set, the client authenticates with the token and re-reads the file on every connection, so a rotated token is picked up without a restart. The manager fails to start if the file does not exist. When empty or omitted the client connects anonymously. The config is rendered with `text/template`, so an unset `PULSAR_TOKEN_FILE` renders as `<no value>` and fails; only reference it where the variable is set.
 
 ### Run Locally
 
