@@ -1,5 +1,9 @@
 # Workspace Manager
 
+## Unreleased
+
+- Added optional `Category` (`category`) to the `WorkspaceSettings` struct, the workspace's pricing category for accounting-service
+
 ## v0.1.5 (31-03-2025)
 
 - PV/PVC names based on the `<workspace-name>` template - bugfix
