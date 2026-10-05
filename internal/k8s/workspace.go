@@ -8,8 +8,6 @@ import (
 	"github.com/EO-DataHub/eodhp-workspace-manager/internal/utils"
 	"github.com/EO-DataHub/eodhp-workspace-manager/models"
 	"github.com/rs/zerolog/log"
-	"k8s.io/apimachinery/pkg/api/equality"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -149,24 +147,12 @@ func UpdateWorkspace(ctx context.Context, k8sClient client.Client, req models.Wo
 	// Retrieve the existing Workspace from the cluster
 	existingWorkspace := &workspacev1alpha1.Workspace{}
 	err := k8sClient.Get(ctx, client.ObjectKey{Name: req.Name, Namespace: "workspaces"}, existingWorkspace)
-	if apierrors.IsNotFound(err) {
-		// Nothing to update: the workspace was deleted, or its create has not been processed yet
-		// and will build it from current settings. Returning an error would redeliver this forever.
-		log.Warn().Str("name", req.Name).Msg("Workspace not found; skipping update")
-		return nil
-	}
 	if err != nil {
 		return fmt.Errorf("failed to fetch workspace %s: %w", req.Name, err)
 	}
 
 	// Build the desired spec from the settings
 	desired := buildWorkspace(req, c)
-
-	// Settings that do not affect the spec (e.g. the pricing category) need no write
-	if equality.Semantic.DeepEqual(existingWorkspace.Spec, desired.Spec) {
-		log.Info().Str("name", req.Name).Msg("Workspace spec unchanged; skipping update")
-		return nil
-	}
 
 	// Change only the spec on the existing object, so finalizers, annotations and labels
 	// set by the workspace-controller are kept

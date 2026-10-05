@@ -3,6 +3,7 @@
 ## Unreleased
 
 - Added optional `Category` (`category`) to the `WorkspaceSettings` struct, the workspace's pricing category for accounting-service
+- Updates now change only the workspace spec, so the workspace-controller's finalizers, annotations and labels are kept - bugfix
 
 ## v0.1.5 (31-03-2025)
 
