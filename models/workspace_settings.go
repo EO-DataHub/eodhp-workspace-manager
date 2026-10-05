@@ -15,6 +15,9 @@ type WorkspaceSettings struct {
 	Status      string    `json:"status"`
 	Stores      *[]Stores `json:"stores"`
 	LastUpdated time.Time `json:"last_updated"`
+	// Category is the workspace's pricing category, used by accounting-service.
+	// Nil means no category has been set and the default rate applies.
+	Category *string `json:"category,omitempty"`
 }
 
 // Stores holds lists of object and block stores associated with a workspace.

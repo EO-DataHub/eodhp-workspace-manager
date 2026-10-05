@@ -151,14 +151,15 @@ func UpdateWorkspace(ctx context.Context, k8sClient client.Client, req models.Wo
 		return fmt.Errorf("failed to fetch workspace %s: %w", req.Name, err)
 	}
 
-	// Build the updated Workspace
-	updatedWorkspace := buildWorkspace(req, c)
+	// Build the desired spec from the settings
+	desired := buildWorkspace(req, c)
 
-	// Set the ResourceVersion to ensure the update is successful
-	updatedWorkspace.ObjectMeta.ResourceVersion = existingWorkspace.ObjectMeta.ResourceVersion
+	// Change only the spec on the existing object, so finalizers, annotations and labels
+	// set by the workspace-controller are kept
+	existingWorkspace.Spec = desired.Spec
 
 	// Perform the update operation
-	err = k8sClient.Update(ctx, updatedWorkspace)
+	err = k8sClient.Update(ctx, existingWorkspace)
 	if err != nil {
 		return fmt.Errorf("failed to update workspace %s: %w", req.Name, err)
 	}

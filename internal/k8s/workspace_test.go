@@ -107,6 +107,63 @@ func TestUpdateWorkspace(t *testing.T) {
 	assert.Equal(t, "update-ws", updated.Name)
 }
 
+func TestUpdateWorkspacePreservesControllerMetadata(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = v1alpha1.AddToScheme(scheme)
+
+	fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
+	ctx := context.Background()
+
+	cfg := &utils.Config{
+		AWS: utils.AWSConfig{
+			Bucket:  "bucket",
+			Cluster: "cluster",
+			FSID:    "fsid",
+		},
+		Storage: utils.StorageConfig{
+			Driver:       "efs",
+			StorageClass: "standard",
+			Size:         "5Gi",
+		},
+	}
+
+	settings := models.WorkspaceSettings{
+		Name: "meta-ws",
+		Stores: &[]models.Stores{
+			{
+				Block:  []models.BlockStore{{Name: "block1"}},
+				Object: []models.ObjectStore{{Name: "object1"}},
+			},
+		},
+	}
+	assert.NoError(t, CreateWorkspace(ctx, fakeClient, settings, cfg))
+
+	// Simulate the workspace-controller adding its finalizer and an annotation
+	key := client.ObjectKey{Name: "meta-ws", Namespace: "workspaces"}
+	existing := &v1alpha1.Workspace{}
+	assert.NoError(t, fakeClient.Get(ctx, key, existing))
+	existing.Finalizers = []string{"core.telespazio-uk.io/workspace-finalizer"}
+	existing.Annotations = map[string]string{"example.com/note": "kept"}
+	assert.NoError(t, fakeClient.Update(ctx, existing))
+
+	// An update must change the spec and keep the controller's finalizer and annotation
+	changed := settings
+	changed.Status = "updating"
+	changed.Stores = &[]models.Stores{
+		{
+			Block:  []models.BlockStore{{Name: "block2"}},
+			Object: []models.ObjectStore{{Name: "object2"}},
+		},
+	}
+	assert.NoError(t, UpdateWorkspace(ctx, fakeClient, changed, cfg))
+
+	updated := &v1alpha1.Workspace{}
+	assert.NoError(t, fakeClient.Get(ctx, key, updated))
+	assert.Equal(t, []string{"core.telespazio-uk.io/workspace-finalizer"}, updated.Finalizers)
+	assert.Equal(t, "kept", updated.Annotations["example.com/note"])
+	assert.Equal(t, "block2", updated.Spec.AWS.EFS.AccessPoints[0].Name)
+}
+
 func TestDeleteWorkspace(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = v1alpha1.AddToScheme(scheme)
