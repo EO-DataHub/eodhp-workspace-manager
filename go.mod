@@ -2,7 +2,6 @@ module github.com/EO-DataHub/eodhp-workspace-manager
 
 go 1.23.0
 
-toolchain go1.26.10
 
 require (
 	github.com/EO-DataHub/eodhp-workspace-controller v0.0.0-20250129163210-6dc81f5c1b3c
